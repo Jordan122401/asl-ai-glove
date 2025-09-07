@@ -1,6 +1,10 @@
 package com.example.seniorproject
 
+import android.Manifest
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.widget.Button
@@ -9,28 +13,20 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
-import android.content.Intent
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import java.util.*
 
 class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
-    // Declare views as properties
     private lateinit var editTextInput: EditText
     private lateinit var textViewResult: TextView
     private lateinit var buttonConnect: Button
     private lateinit var buttonSettings: Button
-
-    private lateinit var tts: TextToSpeech
-
     private lateinit var bluetoothButton: Button
+    private lateinit var tts: TextToSpeech
 
     private var ttsEnabled = true
     private var fontSize = 20
@@ -55,43 +51,39 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         buttonSettings = findViewById(R.id.settingsButton)
         bluetoothButton = findViewById(R.id.checkBluetoothButton)
 
-        // Initialize TextToSpeech
+        // Initialize TTS
         tts = TextToSpeech(this, this)
 
-        // Connect Text button logic
+        // Connect Text button
         buttonConnect.setOnClickListener {
             val lines = editTextInput.text.toString().split("\n")
             val connected = lines.joinToString(" ") { it.replace(" ", "") }
-
-            // Set text and font size
             textViewResult.text = connected
             textViewResult.textSize = fontSize.toFloat()
 
-            // Speak text only if TTS is enabled
             if (ttsEnabled) {
                 tts.speak(connected, TextToSpeech.QUEUE_FLUSH, null, null)
             }
         }
 
-        // Settings button placeholder
+        // Settings button
         buttonSettings.setOnClickListener {
             val intent = Intent(this, SettingsActivity::class.java)
             startActivity(intent)
         }
-        //bluetoothButton
+
+        // Bluetooth button
         bluetoothButton.setOnClickListener {
-            val intent = Intent(this, BluetoothActivity::class.java)
-            startActivity(intent)
+            checkBluetoothPermission()
         }
     }
+
     override fun onResume() {
         super.onResume()
-
-        val prefs = getSharedPreferences("settings", Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
         fontSize = prefs.getInt("fontSize", 20)
-        ttsEnabled = prefs.getBoolean("ttsOn", true)
+        ttsEnabled = prefs.getBoolean("ttsEnabled", true)
 
-        // Apply font size immediately to connectedText
         textViewResult.textSize = fontSize.toFloat()
     }
 
@@ -110,46 +102,36 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun checkBluetoothPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            // Android 12+ requires BLUETOOTH_CONNECT
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
-                != PackageManager.PERMISSION_GRANTED
-            ) {
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
-                    BLUETOOTH_PERMISSION_REQUEST
-                )
-            } else {
-                Toast.makeText(this, "Bluetooth permission already granted", Toast.LENGTH_SHORT).show()
-            }
+        val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
         } else {
-            // For Android < 12
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH)
-                != PackageManager.PERMISSION_GRANTED
-            ) {
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(Manifest.permission.BLUETOOTH),
-                    BLUETOOTH_PERMISSION_REQUEST
-                )
+            ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH) == PackageManager.PERMISSION_GRANTED
+        }
+
+        if (hasPermission) {
+            // Permission granted, go to BluetoothActivity
+            startActivity(Intent(this, BluetoothActivity::class.java))
+        } else {
+            // Request permission
+            val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                Manifest.permission.BLUETOOTH_CONNECT
             } else {
-                Toast.makeText(this, "Bluetooth permission already granted", Toast.LENGTH_SHORT).show()
+                Manifest.permission.BLUETOOTH
             }
+            ActivityCompat.requestPermissions(this, arrayOf(permission), BLUETOOTH_PERMISSION_REQUEST)
         }
     }
 
-    // Handle user response
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-
         if (requestCode == BLUETOOTH_PERMISSION_REQUEST) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 Toast.makeText(this, "Bluetooth permission granted", Toast.LENGTH_SHORT).show()
+                startActivity(Intent(this, BluetoothActivity::class.java))
             } else {
                 Toast.makeText(this, "Bluetooth permission denied", Toast.LENGTH_SHORT).show()
             }
