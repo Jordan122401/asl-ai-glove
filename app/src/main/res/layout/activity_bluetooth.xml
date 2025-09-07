@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:background="@color/dark_blue"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp"
+    android:gravity="center">
+
+    <!-- Check Permission Button -->
+    <Button
+        android:id="@+id/buttonCheckPermission"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Check Bluetooth Permission"
+        android:layout_marginBottom="16dp"/>
+
+    <!-- Turn On Bluetooth Button -->
+    <Button
+        android:id="@+id/buttonTurnOnBluetooth"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Turn On Bluetooth"/>
+
+    <Button
+        android:id="@+id/buttonBack"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Back to Main"
+        android:layout_marginTop="16dp"/>
+</LinearLayout>

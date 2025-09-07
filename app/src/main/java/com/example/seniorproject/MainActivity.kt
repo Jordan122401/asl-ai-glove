@@ -12,6 +12,11 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import android.content.Intent
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 
 import java.util.*
 
@@ -25,8 +30,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private lateinit var tts: TextToSpeech
 
+    private lateinit var bluetoothButton: Button
+
     private var ttsEnabled = true
     private var fontSize = 20
+    private val BLUETOOTH_PERMISSION_REQUEST = 1001
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,6 +53,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         textViewResult = findViewById(R.id.connectedText)
         buttonConnect = findViewById(R.id.connectButton)
         buttonSettings = findViewById(R.id.settingsButton)
+        bluetoothButton = findViewById(R.id.checkBluetoothButton)
 
         // Initialize TextToSpeech
         tts = TextToSpeech(this, this)
@@ -67,6 +76,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         // Settings button placeholder
         buttonSettings.setOnClickListener {
             val intent = Intent(this, SettingsActivity::class.java)
+            startActivity(intent)
+        }
+        //bluetoothButton
+        bluetoothButton.setOnClickListener {
+            val intent = Intent(this, BluetoothActivity::class.java)
             startActivity(intent)
         }
     }
@@ -93,5 +107,52 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         tts.stop()
         tts.shutdown()
         super.onDestroy()
+    }
+
+    private fun checkBluetoothPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // Android 12+ requires BLUETOOTH_CONNECT
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
+                    BLUETOOTH_PERMISSION_REQUEST
+                )
+            } else {
+                Toast.makeText(this, "Bluetooth permission already granted", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            // For Android < 12
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.BLUETOOTH),
+                    BLUETOOTH_PERMISSION_REQUEST
+                )
+            } else {
+                Toast.makeText(this, "Bluetooth permission already granted", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    // Handle user response
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+
+        if (requestCode == BLUETOOTH_PERMISSION_REQUEST) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "Bluetooth permission granted", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Bluetooth permission denied", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 }
