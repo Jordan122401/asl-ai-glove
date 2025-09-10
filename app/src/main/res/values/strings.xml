@@ -1,5 +1,5 @@
 <resources>
     <string name="app_name">SeniorProject</string>
-    <string name="project">AI - POWERED GLOVE FOR ASL TRANSLATION</string>
+    <string name="project">SignCast</string>
     <string name="title_activity_settings">SettingsActivity</string>
 </resources>

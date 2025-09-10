@@ -18,6 +18,14 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import java.util.*
+import com.example.seniorproject.ml.ASLClassifier
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.Job // CHANGED: add Job to manage the stream coroutine
+import com.example.seniorproject.data.DemoSensorSource
 
 class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
@@ -27,15 +35,44 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var buttonSettings: Button
     private lateinit var bluetoothButton: Button
     private lateinit var tts: TextToSpeech
-
+    private lateinit var classifier: ASLClassifier
+    private lateinit var inputEdit: EditText
+    private lateinit var demo: DemoSensorSource
     private var ttsEnabled = true
     private var fontSize = 20
     private val BLUETOOTH_PERMISSION_REQUEST = 1001
+
+    // CHANGED: keep a handle to the running demo stream so we can stop it cleanly
+    private var streamJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContentView(R.layout.activity_main)
+
+        classifier = ASLClassifier(this)
+        // CHANGED: Demo source emits exactly the 2-feature vectors your POC model expects
+        demo = DemoSensorSource(this, periodMs = 300L, csvAsset = "demo_samples.csv") // will fallback if CSV missing
+        inputEdit = findViewById(R.id.inputText)
+
+        // CHANGED: start a single demo stream on app launch; remove the extra test block below
+        streamJob = lifecycleScope.launch(Dispatchers.IO) {
+            while (isActive) {
+                val features2 = demo.nextFeatures() ?: continue // length 2 from DemoSensorSource
+                val pred = classifier.predict(features2)
+
+                android.util.Log.d("ASLDemo", "feat=${features2.contentToString()} -> ${pred.label} p=${pred.probability}")
+
+                if (pred.probability >= 0.3f) { // tune threshold as needed
+                    withContext(Dispatchers.Main) {
+                        inputEdit.append(pred.label)
+                    }
+                }
+            }
+        }
+
+        // CHANGED: removed the second coroutine that created 11 zeros and sliced to 2.
+        // It was redundant and caused double-inference / confusion.
 
         // Adjust for system bars
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
@@ -54,7 +91,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         // Initialize TTS
         tts = TextToSpeech(this, this)
 
-        // Connect Text button
+        // Connect Text button: keep your existing behavior (concat + TTS)
         buttonConnect.setOnClickListener {
             val lines = editTextInput.text.toString().split("\n")
             val connected = lines.joinToString(" ") { it.replace(" ", "") }
@@ -96,8 +133,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     override fun onDestroy() {
+        // CHANGED: stop the stream before shutting down
+        streamJob?.cancel() // stop the coroutine loop
+        streamJob = null
+
         tts.stop()
         tts.shutdown()
+        classifier.close()
+        lifecycleScope.launch {
+            demo.close()
+        }
         super.onDestroy()
     }
 
