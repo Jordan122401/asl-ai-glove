@@ -24,7 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.Job // CHANGED: add Job to manage the stream coroutine
+import kotlinx.coroutines.Job
 import com.example.seniorproject.data.DemoSensorSource
 
 class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
@@ -42,7 +42,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var fontSize = 20
     private val BLUETOOTH_PERMISSION_REQUEST = 1001
 
-    // CHANGED: keep a handle to the running demo stream so we can stop it cleanly
     private var streamJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -71,8 +70,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
         }
 
-        // CHANGED: removed the second coroutine that created 11 zeros and sliced to 2.
-        // It was redundant and caused double-inference / confusion.
 
         // Adjust for system bars
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
@@ -133,7 +130,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     override fun onDestroy() {
-        // CHANGED: stop the stream before shutting down
         streamJob?.cancel() // stop the coroutine loop
         streamJob = null
 
