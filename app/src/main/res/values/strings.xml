@@ -2,4 +2,7 @@
     <string name="app_name">SeniorProject</string>
     <string name="project">SignCast</string>
     <string name="title_activity_settings">SettingsActivity</string>
+    <string name="tts_is_on">TTS is ON</string>
+    <string name="tts_is_off">TTS is OFF</string>
+    <string name="signcast_logo">SignCast Logo</string>
 </resources>

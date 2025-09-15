@@ -27,6 +27,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.Job // CHANGED: add Job to manage the stream coroutine
 import com.example.seniorproject.data.DemoSensorSource
 
+
 class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private lateinit var editTextInput: EditText
@@ -42,13 +43,22 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var fontSize = 20
     private val BLUETOOTH_PERMISSION_REQUEST = 1001
 
+
     // CHANGED: keep a handle to the running demo stream so we can stop it cleanly
     private var streamJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val prefs = getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
+        when (prefs.getString("theme", "Light")) {
+            "Light" -> setTheme(R.style.Theme_SeniorProject_Light)
+            "Dark" -> setTheme(R.style.Theme_SeniorProject_Dark)
+            else -> setTheme(R.style.Theme_SeniorProject_Light)
+        }
+
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContentView(R.layout.activity_main)
+
 
         classifier = ASLClassifier(this)
         // CHANGED: Demo source emits exactly the 2-feature vectors your POC model expects
@@ -67,6 +77,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     withContext(Dispatchers.Main) {
                         inputEdit.append(pred.label)
                     }
+
+
                 }
             }
         }
@@ -89,7 +101,35 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         bluetoothButton = findViewById(R.id.checkBluetoothButton)
 
         // Initialize TTS
-        tts = TextToSpeech(this, this)
+        tts = TextToSpeech(this) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                // Load speech rate and language preferences
+                val speechRate = prefs.getFloat("speechRate", 1.0f)
+                val language = prefs.getString("language", "English")
+
+                // Map language name to Locale
+                val locale = when(language) {
+                    "Spanish" -> Locale("es", "ES")
+                    "French" -> Locale("fr", "FR")
+                    else -> Locale.ENGLISH
+                }
+
+                // Set speech rate
+                tts.setSpeechRate(speechRate)
+
+                // Set language, check if supported
+                val result = tts.setLanguage(locale)
+                if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    Toast.makeText(this, "Selected language not supported", Toast.LENGTH_SHORT).show()
+                }
+
+                // Additional TTS setup if needed
+            } else {
+                // Handle initialization failure if needed
+            }
+        }
+
+
 
         // Connect Text button: keep your existing behavior (concat + TTS)
         buttonConnect.setOnClickListener {
@@ -114,6 +154,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             checkBluetoothPermission()
         }
     }
+
 
     override fun onResume() {
         super.onResume()

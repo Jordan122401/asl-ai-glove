@@ -25,7 +25,6 @@
         <Spinner
             android:id="@+id/fontSizeSpinner"
             android:layout_width="match_parent"
-
             android:layout_height="48dp"/>
 
         <!-- Preview -->
@@ -86,6 +85,85 @@
             android:layout_marginTop="8dp"/>
     </LinearLayout>
 
+    <!-- Theme selection Container -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="8dp"
+        android:background="@drawable/container_bg"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Theme"
+            android:textColor="@color/white"
+            android:textSize="18sp"
+            android:layout_marginBottom="8dp" />
+
+        <Spinner
+            android:id="@+id/themeSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+    </LinearLayout>
+
+    <!-- Speech Rate Container -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="8dp"
+        android:background="@drawable/container_bg"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Speech Rate"
+            android:textColor="@color/white"
+            android:textSize="18sp"
+            android:layout_marginBottom="8dp" />
+
+        <SeekBar
+            android:id="@+id/speechRateSeekBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="200"
+            android:progress="100" />
+
+        <TextView
+            android:id="@+id/speechRatePreview"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Speech Rate: 1.0"
+            android:textColor="@color/white"
+            android:layout_marginTop="8dp" />
+    </LinearLayout>
+
+    <!-- Language selection Container -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="8dp"
+        android:background="@drawable/container_bg"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Preferred Language"
+            android:textColor="@color/white"
+            android:textSize="18sp"
+            android:layout_marginBottom="8dp" />
+
+        <Spinner
+            android:id="@+id/languageSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+    </LinearLayout>
+
     <!-- Save Button -->
     <Button
         android:id="@+id/saveSettingsButton"
@@ -93,3 +171,4 @@
         android:layout_height="wrap_content"
         android:text="Save"/>
 </LinearLayout>
+

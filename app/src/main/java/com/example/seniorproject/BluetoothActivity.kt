@@ -3,6 +3,7 @@ package com.example.seniorproject
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -22,6 +23,12 @@ class BluetoothActivity : AppCompatActivity() {
     private lateinit var bluetoothAdapter: BluetoothAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val prefs = getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
+        when (prefs.getString("theme", "Light")) {
+            "Light" -> setTheme(R.style.Theme_SeniorProject_Light)
+            "Dark" -> setTheme(R.style.Theme_SeniorProject_Dark)
+            else -> setTheme(R.style.Theme_SeniorProject_Light)
+        }
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_bluetooth)
 
