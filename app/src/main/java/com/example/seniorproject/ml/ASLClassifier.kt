@@ -12,34 +12,33 @@ import java.nio.channels.FileChannel
 
 /**
  * Minimal TFLite/LiteRT wrapper for single inferences.
- * - INPUT_SIZE: number of features your model expects (2 for your POC).
+ * - INPUT_SIZE: number of features our model expects (2 for Proof of Concept).
  * - Output classes are auto-detected from the model's output tensor.
  */
 class ASLClassifier(
     private val context: Context,
     private val modelFileName: String = "asl_model.tflite",
-    private val labelsFileName: String? = "labels.txt", // set null if you don't ship labels.txt
+    private val labelsFileName: String? = "labels.txt",
     numThreads: Int = 2
 ) {
-    // ====== set these to your real values ======
+    // Update these to our real values later
     private val INPUT_SIZE = 2
-    // CHANGED: remove hardcoded NUM_CLASSES; we'll detect it from the model
-    private var numClasses: Int = -1            // CHANGED: will be set after allocateTensors()
-    private lateinit var outputBuffer: Array<FloatArray> // CHANGED: late-init after we know numClasses
-    // If you standardized in training, paste means/stds (length = INPUT_SIZE)
+    private var numClasses: Int = -1
+    private lateinit var outputBuffer: Array<FloatArray>
+    // If we standardized in training, paste means/stds (length = INPUT_SIZE)
     private val MEANS = FloatArray(INPUT_SIZE) { 0f }
     private val STDS  = FloatArray(INPUT_SIZE) { 1f }
     // ===========================================
 
     private val interpreter: Interpreter
-    private lateinit var labels: List<String>   // CHANGED: late-init after detecting numClasses
+    private lateinit var labels: List<String>
     private val inputBuffer = Array(1) { FloatArray(INPUT_SIZE) }
 
     init {
-        // Conservative options for emulator + 1D input
+
         val options = Interpreter.Options().apply {
-            setNumThreads(1)            // keep simple for emulator
-            setUseXNNPACK(false)        // disable XNNPACK delegate to avoid reshape issues on some hosts
+            setNumThreads(1)
+            setUseXNNPACK(false)
         }
 
         try {
@@ -49,7 +48,7 @@ class ASLClassifier(
             interpreter.resizeInput(0, intArrayOf(1, INPUT_SIZE))
             interpreter.allocateTensors()
 
-            // CHANGED: auto-detect output shape/classes and allocate output buffer
+            // Auto-detect output shape/classes and allocate output buffer
             val outShape = interpreter.getOutputTensor(0).shape() // e.g., [1, 3]
             require(outShape.size == 2 && outShape[0] == 1) {
                 "Unexpected output shape: ${outShape.contentToString()}"
@@ -57,7 +56,7 @@ class ASLClassifier(
             numClasses = outShape[1]
             outputBuffer = Array(1) { FloatArray(numClasses) }
 
-            // CHANGED: load labels to match detected numClasses (fallback to A..Z style)
+            // Load labels to match detected numClasses (fallback to A..Z style)
             labels = loadLabelsOrAlphabet(numClasses)
             require(labels.size == numClasses) {
                 "Labels count (${labels.size}) must equal detected numClasses ($numClasses)."
@@ -75,7 +74,7 @@ class ASLClassifier(
         }
     }
 
-    // CHANGED: accept expected count so labels match model output
+    // Accept expected count so labels match model output
     private fun loadLabelsOrAlphabet(expected: Int): List<String> {
         labelsFileName ?: return (0 until expected).map { ('A' + it).toString() }
         return try {
@@ -85,14 +84,14 @@ class ASLClassifier(
                     .filter { it.isNotBlank() }
             }.let { lines ->
                 if (lines.size == expected) lines
-                else (0 until expected).map { ('A' + it).toString() } // fallback if mismatch
+                else (0 until expected).map { ('A' + it).toString() }
             }
         } catch (_: Exception) {
             (0 until expected).map { ('A' + it).toString() }
         }
     }
 
-    /** Normalize features exactly like training: (x - mean) / std */
+    // Normalize features exactly like training: (x - mean) / std
     private fun normalizeInPlace(features: FloatArray) {
         for (i in features.indices) {
             val std = if (STDS[i] == 0f) 1f else STDS[i]
@@ -112,15 +111,15 @@ class ASLClassifier(
             "Expected feature length $INPUT_SIZE, got ${rawFeatures.size}"
         }
 
-        // copy + normalize
+        // Copy + normalize
         val f = rawFeatures.copyOf()
         normalizeInPlace(f)
         for (i in 0 until INPUT_SIZE) inputBuffer[0][i] = f[i]
 
-        // inference
+        // Inference
         interpreter.run(inputBuffer, outputBuffer)
 
-        // argmax
+        // Argmax
         val probs = outputBuffer[0]
         var bestIdx = 0
         var best = Float.NEGATIVE_INFINITY

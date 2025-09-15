@@ -1,15 +1,15 @@
 package com.example.seniorproject.data
 
-import android.content.Context
+import kotlin.random.Random
 import kotlinx.coroutines.delay
+import android.content.Context
 import java.io.BufferedReader
 import java.io.InputStreamReader
-import kotlin.random.Random
 
 class DemoSensorSource(
     private val context: Context,
     private val periodMs: Long = 300L, // how often to emit a sample
-    private val csvAsset: String? = null // e.g. "demo_samples.csv"
+    private val csvAsset: String? = null
 ) : SensorSource {
 
     private val samples: List<FloatArray>
@@ -43,12 +43,11 @@ class DemoSensorSource(
     )
 
     override suspend fun nextFeatures(): FloatArray? {
-        delay(periodMs)
-        if (samples.isEmpty()) return floatArrayOf(
-            Random.nextFloat(), Random.nextFloat()
-        )
-        val f = samples[i % samples.size]
-        i++
-        return f
+        kotlinx.coroutines.delay(periodMs)
+        if (samples.isEmpty()) return null
+        return samples[kotlin.random.Random.nextInt(samples.size)]
     }
+
+    override suspend fun close() { /* nothing to close for demo */ }
+
 }
