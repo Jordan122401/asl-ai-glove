@@ -34,6 +34,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var buttonConnect: Button
     private lateinit var buttonSettings: Button
     private lateinit var bluetoothButton: Button
+    private lateinit var clearTextButton: Button
     private lateinit var tts: TextToSpeech
     private lateinit var classifier: ASLClassifier
     private lateinit var inputEdit: EditText
@@ -84,6 +85,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         buttonConnect = findViewById(R.id.connectButton)
         buttonSettings = findViewById(R.id.settingsButton)
         bluetoothButton = findViewById(R.id.checkBluetoothButton)
+        clearTextButton = findViewById(R.id.clearTextButton)
 
         // Initialize TTS
         tts = TextToSpeech(this, this)
@@ -109,6 +111,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         // Bluetooth button
         bluetoothButton.setOnClickListener {
             checkBluetoothPermission()
+        }
+
+        // Clear Text button
+        clearTextButton.setOnClickListener {
+            editTextInput.text.clear()
+            textViewResult.text = ""
         }
     }
 

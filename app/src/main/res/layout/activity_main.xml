@@ -119,19 +119,34 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintBottom_toBottomOf="parent">
 
-        <Button
-            android:id="@+id/connectButton"
+        <!-- Row 1: Connect Text and Clear Text buttons side by side -->
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_weight="1"
-            android:text="Connect Text"
-            android:layout_marginBottom="8dp" />
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <Button
+                android:id="@+id/connectButton"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="Connect Text"
+                android:layout_marginEnd="4dp" />
+
+            <Button
+                android:id="@+id/clearTextButton"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="Clear Text"
+                android:layout_marginStart="4dp" />
+        </LinearLayout>
 
         <Button
             android:id="@+id/settingsButton"
             android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:layout_weight="1"
             android:text="Settings"
             android:layout_marginBottom="8dp" />
 
@@ -139,7 +154,6 @@
             android:id="@+id/checkBluetoothButton"
             android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:layout_weight="1"
             android:text="Check Bluetooth Permission"
             android:layout_marginBottom="8dp" />
     </LinearLayout>
