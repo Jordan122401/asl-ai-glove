@@ -44,11 +44,8 @@ android {
 
 dependencies {
 
-    //implementation(libs.tensorflow.lite)
-    implementation(libs.litert)
-    implementation(libs.litert.api)
-    implementation(libs.litert.support)
-    implementation(libs.litert.metadata)
+    // Use standard TensorFlow Lite
+    implementation(libs.tensorflow.lite)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
@@ -69,5 +66,7 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 
+    // For parsing XGBoost JSON model
+    implementation("com.google.code.gson:gson:2.10.1")
 
 }

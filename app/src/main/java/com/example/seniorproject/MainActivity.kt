@@ -19,6 +19,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import java.util.*
 import com.example.seniorproject.ml.ASLClassifier
+import com.example.seniorproject.ml.FusionASLClassifier
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -26,6 +27,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.Job
 import com.example.seniorproject.data.DemoSensorSource
+import com.example.seniorproject.data.FusionDemoSensorSource
+import com.example.seniorproject.data.SequenceBuffer
 
 class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
@@ -36,12 +39,21 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var bluetoothButton: Button
     private lateinit var clearTextButton: Button
     private lateinit var tts: TextToSpeech
-    private lateinit var classifier: ASLClassifier
+    
+    // Option 1: Use old POC classifier (2 features)
+    // private lateinit var classifier: ASLClassifier
+    // private lateinit var demo: DemoSensorSource
+    
+    // Option 2: Use new Fusion classifier (10 features, 75 timesteps)
+    private lateinit var fusionClassifier: FusionASLClassifier
+    private lateinit var fusionDemo: FusionDemoSensorSource
+    private lateinit var sequenceBuffer: SequenceBuffer
+    
     private lateinit var inputEdit: EditText
-    private lateinit var demo: DemoSensorSource
     private var ttsEnabled = true
     private var fontSize = 20
     private val BLUETOOTH_PERMISSION_REQUEST = 1001
+    private val USE_FUSION_MODEL = true  // Toggle between POC and Fusion model
 
     private var streamJob: Job? = null
 
@@ -50,25 +62,17 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         enableEdgeToEdge()
         setContentView(R.layout.activity_main)
 
-        classifier = ASLClassifier(this)
-        // CHANGED: Demo source emits exactly the 2-feature vectors your POC model expects
-        demo = DemoSensorSource(this, periodMs = 300L, csvAsset = "demo_samples.csv") // will fallback if CSV missing
         inputEdit = findViewById(R.id.inputText)
-
-        // CHANGED: start a single demo stream on app launch; remove the extra test block below
-        streamJob = lifecycleScope.launch(Dispatchers.IO) {
-            while (isActive) {
-                val features2 = demo.nextFeatures() ?: continue // length 2 from DemoSensorSource
-                val pred = classifier.predict(features2)
-
-                android.util.Log.d("ASLDemo", "feat=${features2.contentToString()} -> ${pred.label} p=${pred.probability}")
-
-                if (pred.probability >= 0.3f) { // tune threshold as needed
-                    withContext(Dispatchers.Main) {
-                        inputEdit.append(pred.label)
-                    }
-                }
-            }
+        
+        // Initialize model based on flag
+        if (USE_FUSION_MODEL) {
+            initFusionModel()
+        } else {
+            // Keep old POC model for backward compatibility
+            // classifier = ASLClassifier(this)
+            // demo = DemoSensorSource(this, periodMs = 300L, csvAsset = "demo_samples.csv")
+            // startPOCStream()
+            Toast.makeText(this, "POC model disabled. Set USE_FUSION_MODEL=false to enable.", Toast.LENGTH_SHORT).show()
         }
 
 
@@ -137,16 +141,120 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
+    private fun initFusionModel() {
+        try {
+            // UPDATED: Initialize fusion classifier with TFLite-compatible models
+            // These model files were generated from the Jupyter notebook after fixing TFLite compatibility
+            fusionClassifier = FusionASLClassifier(
+                context = this,
+                lstmModelFileName = "TFLiteCompatible_LSTM.tflite",  // NEW: TFLite-compatible LSTM model
+                xgbModelFileName = "TFLiteCompatible_XGB.json"       // NEW: XGBoost model with robust JSON parsing
+            )
+            
+            // Initialize demo sensor source
+            fusionDemo = FusionDemoSensorSource(
+                context = this,
+                periodMs = 50L,  // 20 Hz sampling
+                csvAsset = "demo_samples.csv"
+            )
+            
+            // Initialize sequence buffer
+            sequenceBuffer = SequenceBuffer(
+                maxLength = fusionClassifier.getSequenceLength(),
+                numFeatures = fusionClassifier.getNumFeatures()
+            )
+            
+            Toast.makeText(this, "Fusion model loaded successfully", Toast.LENGTH_SHORT).show()
+            
+            // Start inference stream
+            startFusionStream()
+            
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Failed to initialize fusion model", e)
+            Toast.makeText(this, "Failed to load fusion model: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+    
+    private fun startFusionStream() {
+        streamJob = lifecycleScope.launch(Dispatchers.IO) {
+            var lastPrediction = ""
+            var stableCount = 0
+            val STABILITY_THRESHOLD = 3  // Require 3 consecutive same predictions
+            
+            while (isActive) {
+                try {
+                    // Get next sensor reading
+                    val features = fusionDemo.nextFeatures() ?: continue
+                    
+                    // Add to buffer
+                    sequenceBuffer.add(features)
+                    
+                    // Only predict when buffer has enough data (at least 50% full)
+                    if (sequenceBuffer.size() >= fusionClassifier.getSequenceLength() / 2) {
+                        // Get sequence from buffer
+                        val sequence = sequenceBuffer.getSequence()
+                        
+                        // Run fusion prediction
+                        val pred = fusionClassifier.predict(sequence)
+                        
+                        android.util.Log.d("FusionDemo", 
+                            "Buffer: ${sequenceBuffer.size()}/${fusionClassifier.getSequenceLength()}, " +
+                            "Prediction: $pred"
+                        )
+                        
+                        // Stability check: only add prediction if it's stable
+                        if (pred.label == lastPrediction) {
+                            stableCount++
+                        } else {
+                            lastPrediction = pred.label
+                            stableCount = 1
+                        }
+                        
+                        // Add to input if prediction is stable and confident
+                        if (stableCount >= STABILITY_THRESHOLD && 
+                            pred.probability >= 0.5f &&
+                            pred.label != "Neutral") {  // Don't add neutral gestures
+                            
+                            withContext(Dispatchers.Main) {
+                                inputEdit.append(pred.label)
+                            }
+                            
+                            // Reset for next gesture
+                            stableCount = 0
+                            lastPrediction = ""
+                            sequenceBuffer.clear()  // Clear buffer for next gesture
+                            
+                            // Small delay to avoid rapid repeated predictions
+                            kotlinx.coroutines.delay(500L)
+                        }
+                    }
+                    
+                } catch (e: Exception) {
+                    android.util.Log.e("FusionDemo", "Error in inference loop", e)
+                }
+            }
+        }
+    }
+
     override fun onDestroy() {
         streamJob?.cancel() // stop the coroutine loop
         streamJob = null
 
         tts.stop()
         tts.shutdown()
-        classifier.close()
-        lifecycleScope.launch {
-            demo.close()
+        
+        if (USE_FUSION_MODEL) {
+            fusionClassifier.close()
+            lifecycleScope.launch {
+                fusionDemo.close()
+            }
+        } else {
+            // classifier.close()
+            // lifecycleScope.launch {
+            //     demo.close()
+            // }
         }
+        
         super.onDestroy()
     }
 
