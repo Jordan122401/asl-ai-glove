@@ -156,6 +156,45 @@
             android:layout_height="48dp"
             android:text="Check Bluetooth Permission"
             android:layout_marginBottom="8dp" />
+            
+        <!-- Demo Control Buttons -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+            
+            <Button
+                android:id="@+id/startDemoButton"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="Start Demo"
+                android:backgroundTint="@android:color/holo_green_light"
+                android:layout_marginEnd="4dp" />
+                
+            <Button
+                android:id="@+id/stopDemoButton"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="Stop Demo"
+                android:backgroundTint="@android:color/holo_red_light"
+                android:layout_marginStart="4dp"
+                android:enabled="false" />
+        </LinearLayout>
+        
+        <!-- Demo Status Display -->
+        <TextView
+            android:id="@+id/demoStatusText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Demo: Ready to start"
+            android:textSize="16sp"
+            android:textColor="?attr/colorOnSurface"
+            android:gravity="center"
+            android:layout_marginBottom="8dp"
+            android:visibility="visible" />
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

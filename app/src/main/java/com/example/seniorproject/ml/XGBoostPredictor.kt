@@ -33,106 +33,65 @@ class XGBoostPredictor(
         loadModel()
     }
 
-    // ENHANCED: Added robust JSON parsing to handle different XGBoost export formats
-    // This fixes the "com.google.gson.JsonPrimitive cannot..." error that was occurring
     private fun loadModel() {
         try {
             val inputStream = context.assets.open(modelFileName)
             val reader = InputStreamReader(inputStream)
             val gson = Gson()
-            val jsonObject = gson.fromJson(reader, JsonObject::class.java)
             
-            // ADDED: Debug logging to help identify JSON structure issues
-            Log.d("XGBoostPredictor", "JSON structure: ${jsonObject.keySet()}")
-            
-            // ADDED: Support for multiple XGBoost JSON formats
-            // Different XGBoost versions or export methods may create different JSON structures
-            when {
-                jsonObject.has("learner") -> {
-                    loadXGBoostFormat(jsonObject)  // Standard XGBoost format
+            // Try to parse as JsonObject first (standard XGBoost format)
+            try {
+                val jsonObject = gson.fromJson(reader, JsonObject::class.java)
+                
+                if (jsonObject.has("learner")) {
+                    // Standard XGBoost format
+                    val learner = jsonObject.getAsJsonObject("learner")
+                    val learnerModelParam = learner.getAsJsonObject("learner_model_param")
+                    numClass = learnerModelParam.get("num_class").asInt
+                    baseScore = learnerModelParam.get("base_score").asFloat
+                    
+                    val gradientBooster = learner.getAsJsonObject("gradient_booster")
+                    val model = gradientBooster.getAsJsonObject("model")
+                    val treesArray = model.getAsJsonArray("trees")
+                    
+                    trees = treesArray.mapIndexed { index, treeElement ->
+                        Log.d("XGBoostPredictor", "Parsing tree $index")
+                        val tree = parseTree(treeElement.asJsonObject)
+                        Log.d("XGBoostPredictor", "Tree $index parsed successfully: ${if (tree.leaf != null) "leaf=${tree.leaf}" else "split=${tree.split}"}")
+                        tree
+                    }
+                } else {
+                    throw Exception("No learner found in JSON")
                 }
-                jsonObject.has("num_class") -> {
-                    loadSimpleFormat(jsonObject)   // Simplified format
+            } catch (e: Exception) {
+                // Reset reader and try as JsonArray (direct tree format)
+                reader.close()
+                val newReader = InputStreamReader(context.assets.open(modelFileName))
+                val treesArray = gson.fromJson(newReader, com.google.gson.JsonArray::class.java)
+                
+                // For array format, use default values
+                numClass = 5
+                baseScore = 0.5f
+                
+                trees = treesArray.map { treeElement ->
+                    parseTree(treeElement.asJsonObject)
                 }
-                else -> {
-                    Log.e("XGBoostPredictor", "Unknown XGBoost JSON format")
-                    throw IllegalArgumentException("Unknown XGBoost JSON format")
-                }
+                newReader.close()
             }
             
             Log.d("XGBoostPredictor", "Loaded ${trees.size} trees, $numClass classes")
             reader.close()
         } catch (e: Exception) {
             Log.e("XGBoostPredictor", "Failed to load XGBoost model", e)
-            Log.e("XGBoostPredictor", "Error details: ${e.message}")
             throw e
         }
     }
-    
-    private fun loadXGBoostFormat(jsonObject: JsonObject) {
-        // Standard XGBoost format
-        val learner = jsonObject.getAsJsonObject("learner")
-        val learnerModelParam = learner.getAsJsonObject("learner_model_param")
-        numClass = learnerModelParam.get("num_class").asInt
-        baseScore = learnerModelParam.get("base_score").asFloat
-        
-        // Extract gradient booster (trees)
-        val gradientBooster = learner.getAsJsonObject("gradient_booster")
-        val model = gradientBooster.getAsJsonObject("model")
-        val treesArray = model.getAsJsonArray("trees")
-        
-        trees = treesArray.map { treeElement ->
-            parseTree(treeElement.asJsonObject)
-        }
-    }
-    
-    // ADDED: Support for simplified XGBoost JSON format
-    // This handles cases where the JSON structure is different from standard XGBoost export
-    private fun loadSimpleFormat(jsonObject: JsonObject) {
-        // Simplified format - try to extract basic info with safe defaults
-        numClass = jsonObject.get("num_class")?.asInt ?: 5
-        baseScore = jsonObject.get("base_score")?.asFloat ?: 0.5f
-        
-        // ADDED: Fallback for missing trees - creates dummy tree to prevent crashes
-        if (!jsonObject.has("trees")) {
-            Log.w("XGBoostPredictor", "No trees found in JSON, creating dummy tree")
-            trees = listOf(createDummyTree())
-            return
-        }
-        
-        val treesArray = jsonObject.getAsJsonArray("trees")
-        trees = treesArray.map { treeElement ->
-            parseTree(treeElement.asJsonObject)
-        }
-    }
-    
-    // ADDED: Creates a dummy tree to prevent crashes when JSON parsing fails
-    // This ensures the predictor can still function even with malformed JSON
-    private fun createDummyTree(): TreeNode {
-        // Create a simple dummy tree that always returns 0.0
-        return TreeNode(
-            nodeId = 0,
-            leaf = 0.0f
-        )
-    }
 
-    // ENHANCED: Added robust tree parsing with multiple format support and error handling
-    // This prevents crashes when tree JSON structure is unexpected
     private fun parseTree(treeJson: JsonObject): TreeNode {
         try {
-            // ADDED: Debug logging to help identify tree structure issues
-            Log.d("XGBoostPredictor", "Tree JSON keys: ${treeJson.keySet()}")
+            Log.d("XGBoostPredictor", "Parsing tree with keys: ${treeJson.keySet()}")
             
-            // ADDED: Support for simple leaf node format
-            if (treeJson.has("leaf")) {
-                return TreeNode(
-                    nodeId = treeJson.get("nodeid")?.asInt ?: 0,
-                    leaf = treeJson.get("leaf").asFloat
-                )
-            }
-            
-            // Standard XGBoost JSON format has all nodes in flat arrays
-            val nodeIds = treeJson.getAsJsonArray("id").map { it.asInt }
+            // XGBoost JSON format - arrays are indexed by node position
             val leftChildren = treeJson.getAsJsonArray("left_children").map { it.asInt }
             val rightChildren = treeJson.getAsJsonArray("right_children").map { it.asInt }
             val parents = treeJson.getAsJsonArray("parents").map { it.asInt }
@@ -140,12 +99,21 @@ class XGBoostPredictor(
             val splitConditions = treeJson.getAsJsonArray("split_conditions").map { it.asFloat }
             val baseWeights = treeJson.getAsJsonArray("base_weights").map { it.asFloat }
             
+            // Create node IDs based on array indices (0, 1, 2, ...)
+            val nodeIds = (0 until leftChildren.size).toList()
+            
+            Log.d("XGBoostPredictor", "Tree arrays: nodes=${nodeIds.size}, left=${leftChildren.size}, right=${rightChildren.size}, splits=${splitIndices.size}")
+            
             // Build tree structure (root is always node 0)
             return buildTreeNode(0, nodeIds, leftChildren, rightChildren, splitIndices, splitConditions, baseWeights)
         } catch (e: Exception) {
-            // ADDED: Graceful fallback when tree parsing fails
             Log.e("XGBoostPredictor", "Failed to parse tree, creating dummy tree", e)
-            return createDummyTree()
+            Log.e("XGBoostPredictor", "Tree JSON keys: ${treeJson.keySet()}")
+            // Create a simple dummy tree that returns 0.0
+            return TreeNode(
+                nodeId = 0,
+                leaf = 0.0f
+            )
         }
     }
 
@@ -192,15 +160,24 @@ class XGBoostPredictor(
         // Initialize raw scores (logits) with base score
         val rawScores = FloatArray(numClass) { baseScore }
         
+        Log.d("XGBoostPredictor", "Predicting with ${trees.size} trees, baseScore=$baseScore")
+        
         // Accumulate predictions from all trees
         trees.forEachIndexed { treeIdx, tree ->
             val treeOutput = predictTree(tree, features)
             val classIdx = treeIdx % numClass
             rawScores[classIdx] += treeOutput
+            if (treeIdx < 5) { // Log first 5 trees
+                Log.d("XGBoostPredictor", "Tree $treeIdx -> class $classIdx, output=$treeOutput, rawScore=${rawScores[classIdx]}")
+            }
         }
         
+        Log.d("XGBoostPredictor", "Raw scores before softmax: ${rawScores.joinToString { "%.3f".format(it) }}")
+        
         // Apply softmax to convert to probabilities
-        return softmax(rawScores)
+        val result = softmax(rawScores)
+        Log.d("XGBoostPredictor", "Final probabilities: ${result.joinToString { "%.3f".format(it) }}")
+        return result
     }
 
     private fun predictTree(node: TreeNode, features: FloatArray): Float {
@@ -238,6 +215,5 @@ class XGBoostPredictor(
         return probs.indices.maxByOrNull { probs[it] } ?: 0
     }
 }
-
 
 
