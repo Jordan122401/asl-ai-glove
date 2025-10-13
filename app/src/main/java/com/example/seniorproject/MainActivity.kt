@@ -27,8 +27,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.Job
-import com.example.seniorproject.data.DemoSensorSource
-import com.example.seniorproject.data.FusionDemoSensorSource
+import com.example.seniorproject.data.SensorSource
 import com.example.seniorproject.data.SequenceBuffer
 
 class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
@@ -39,31 +38,21 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var buttonSettings: Button
     private lateinit var bluetoothButton: Button
     private lateinit var clearTextButton: Button
+    private lateinit var connectionStatusText: TextView
     private lateinit var tts: TextToSpeech
     
-    // Demo control UI elements
-    private lateinit var startDemoButton: Button
-    private lateinit var stopDemoButton: Button
-    private lateinit var demoStatusText: TextView
-    
-    // Option 1: Use old POC classifier (2 features)
-    // private lateinit var classifier: ASLClassifier
-    // private lateinit var demo: DemoSensorSource
-    
-    // Option 2: Use new Fusion classifier (10 features, 75 timesteps)
+    // Fusion classifier and sensor source
     private lateinit var fusionClassifier: FusionASLClassifier
-    private lateinit var fusionDemo: FusionDemoSensorSource
+    private var sensorSource: SensorSource? = null
     private lateinit var sequenceBuffer: SequenceBuffer
     
     private lateinit var inputEdit: EditText
     private var ttsEnabled = true
     private var fontSize = 20
     private val BLUETOOTH_PERMISSION_REQUEST = 1001
-    private val USE_FUSION_MODEL = true  // Toggle between POC and Fusion model
 
-    private var streamJob: Job? = null
-    private var demoJob: Job? = null
-    private var isDemoRunning = false
+    private var inferenceJob: Job? = null
+    private var isConnected = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,17 +61,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         inputEdit = findViewById(R.id.inputText)
         
-        // Initialize model based on flag
-        if (USE_FUSION_MODEL) {
-            initFusionModel()
-        } else {
-            // Keep old POC model for backward compatibility
-            // classifier = ASLClassifier(this)
-            // demo = DemoSensorSource(this, periodMs = 300L, csvAsset = "demo_samples.csv")
-            // startPOCStream()
-            Toast.makeText(this, "POC model disabled. Set USE_FUSION_MODEL=false to enable.", Toast.LENGTH_SHORT).show()
-        }
-
+        // Initialize fusion model
+        initFusionModel()
 
         // Adjust for system bars
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
@@ -98,11 +78,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         buttonSettings = findViewById(R.id.settingsButton)
         bluetoothButton = findViewById(R.id.checkBluetoothButton)
         clearTextButton = findViewById(R.id.clearTextButton)
-        
-        // Initialize demo control views
-        startDemoButton = findViewById(R.id.startDemoButton)
-        stopDemoButton = findViewById(R.id.stopDemoButton)
-        demoStatusText = findViewById(R.id.demoStatusText)
+        connectionStatusText = findViewById(R.id.connectionStatusText)
 
         // Initialize TTS
         tts = TextToSpeech(this, this)
@@ -125,24 +101,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             startActivity(intent)
         }
 
-        // Bluetooth button
+        // Bluetooth button - Connect to glove
         bluetoothButton.setOnClickListener {
-            checkBluetoothPermission()
+            checkBluetoothPermissionAndConnect()
         }
 
         // Clear Text button
         clearTextButton.setOnClickListener {
             editTextInput.text.clear()
             textViewResult.text = ""
-        }
-        
-        // Demo control buttons
-        startDemoButton.setOnClickListener {
-            startDemo()
-        }
-        
-        stopDemoButton.setOnClickListener {
-            stopDemo()
         }
     }
 
@@ -172,13 +139,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 xgbModelFileName = "TFLiteCompatible_XGB.json"
             )
             
-            // Initialize demo sensor source
-            fusionDemo = FusionDemoSensorSource(
-                context = this,
-                periodMs = 50L,  // 20 Hz sampling
-                csvAsset = "demo_samples.csv"
-            )
-            
             // Initialize sequence buffer
             sequenceBuffer = SequenceBuffer(
                 maxLength = fusionClassifier.getSequenceLength(),
@@ -187,24 +147,39 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             
             Toast.makeText(this, "Fusion model loaded successfully", Toast.LENGTH_SHORT).show()
             
-            // Note: Inference stream is now started manually via demo buttons
-            
         } catch (e: Exception) {
             android.util.Log.e("MainActivity", "Failed to initialize fusion model", e)
             Toast.makeText(this, "Failed to load fusion model: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
     
-    private fun startFusionStream() {
-        streamJob = lifecycleScope.launch(Dispatchers.IO) {
+    /**
+     * Start real-time inference stream from the connected sensor source.
+     */
+    private fun startInferenceStream() {
+        if (sensorSource == null) {
+            Toast.makeText(this, "No sensor source connected", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        inferenceJob = lifecycleScope.launch(Dispatchers.IO) {
             var lastPrediction = ""
             var stableCount = 0
             val STABILITY_THRESHOLD = 3  // Require 3 consecutive same predictions
             
-            while (isActive) {
+            while (isActive && isConnected) {
                 try {
-                    // Get next sensor reading
-                    val features = fusionDemo.nextFeatures() ?: continue
+                    // Get next sensor reading from glove
+                    val features = sensorSource?.nextFeatures()
+                    
+                    if (features == null) {
+                        android.util.Log.w("Inference", "No features received, checking connection...")
+                        withContext(Dispatchers.Main) {
+                            updateConnectionStatus("Connection lost")
+                            stopInferenceStream()
+                        }
+                        break
+                    }
                     
                     // Add to buffer
                     sequenceBuffer.add(features)
@@ -217,14 +192,19 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         // Run fusion prediction
                         val pred = fusionClassifier.predict(sequence)
                         if (pred == null) {
-                            android.util.Log.w("FusionDemo", "Prediction returned null, skipping")
+                            android.util.Log.w("Inference", "Prediction returned null, skipping")
                             continue
                         }
                         
-                        android.util.Log.d("FusionDemo", 
+                        android.util.Log.d("Inference", 
                             "Buffer: ${sequenceBuffer.size()}/${fusionClassifier.getSequenceLength()}, " +
-                            "Prediction: $pred"
+                            "Prediction: ${pred.label} (${(pred.probability * 100).toInt()}%)"
                         )
+                        
+                        // Update status with current prediction
+                        withContext(Dispatchers.Main) {
+                            updateConnectionStatus("Connected - ${pred.label} (${(pred.probability * 100).toInt()}%)")
+                        }
                         
                         // Stability check: only add prediction if it's stable
                         if (pred.label == lastPrediction) {
@@ -241,6 +221,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                             
                             withContext(Dispatchers.Main) {
                                 inputEdit.append(pred.label)
+                                
+                                // Speak the prediction if TTS is enabled
+                                if (ttsEnabled) {
+                                    tts.speak(pred.label, TextToSpeech.QUEUE_FLUSH, null, null)
+                                }
                             }
                             
                             // Reset for next gesture
@@ -254,40 +239,43 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     }
                     
                 } catch (e: Exception) {
-                    android.util.Log.e("FusionDemo", "Error in inference loop", e)
+                    android.util.Log.e("Inference", "Error in inference loop", e)
                 }
             }
         }
     }
+    
+    /**
+     * Stop the inference stream.
+     */
+    private fun stopInferenceStream() {
+        inferenceJob?.cancel()
+        inferenceJob = null
+        isConnected = false
+        sequenceBuffer.clear()
+    }
 
     override fun onDestroy() {
-        streamJob?.cancel() // stop the coroutine loop
-        streamJob = null
+        // Stop inference stream
+        stopInferenceStream()
         
-        // Stop demo if running
-        demoJob?.cancel()
-        demoJob = null
-        isDemoRunning = false
+        // Close sensor source
+        lifecycleScope.launch {
+            sensorSource?.close()
+        }
+        sensorSource = null
 
+        // Shutdown TTS
         tts.stop()
         tts.shutdown()
         
-        if (USE_FUSION_MODEL) {
-            fusionClassifier.close()
-            lifecycleScope.launch {
-                fusionDemo.close()
-            }
-        } else {
-            // classifier.close()
-            // lifecycleScope.launch {
-            //     demo.close()
-            // }
-        }
+        // Close classifier
+        fusionClassifier.close()
         
         super.onDestroy()
     }
 
-    private fun checkBluetoothPermission() {
+    private fun checkBluetoothPermissionAndConnect() {
         val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
         } else {
@@ -295,8 +283,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
 
         if (hasPermission) {
-            // Permission granted, go to BluetoothActivity
-            startActivity(Intent(this, BluetoothActivity::class.java))
+            // Permission granted, go to BluetoothActivity to connect to glove
+            startActivityForResult(Intent(this, BluetoothActivity::class.java), BLUETOOTH_CONNECT_REQUEST)
         } else {
             // Request permission
             val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -308,282 +296,16 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
     
-    // Demo control methods
-    private fun startDemo() {
-        android.util.Log.d("Demo", "startDemo() called - stack trace: ${Thread.currentThread().stackTrace.take(10).joinToString("\n")}")
-        
-        // Log the call for debugging
-        android.util.Log.d("Demo", "startDemo() called from button click")
-        
-        if (!USE_FUSION_MODEL) {
-            Toast.makeText(this, "Demo requires fusion model to be enabled", Toast.LENGTH_SHORT).show()
-            return
-        }
-        
-        if (isDemoRunning) {
-            Toast.makeText(this, "Demo is already running", Toast.LENGTH_SHORT).show()
-            return
-        }
-        
-        android.util.Log.d("Demo", "Starting demo...")
-        android.util.Log.d("Demo", "Before start: isDemoRunning=$isDemoRunning")
-        isDemoRunning = true
-        android.util.Log.d("Demo", "After start: isDemoRunning=$isDemoRunning")
-        updateDemoUI()
-        
-        // Reset demo state before starting
-        if (::sequenceBuffer.isInitialized) {
-            sequenceBuffer.clear()
-        }
-        if (::fusionDemo.isInitialized) {
-            fusionDemo.reset()
-        }
-        
-        // Start the fusion stream
-        startFusionStream()
-        
-        // Start demo coroutine
-        demoJob = lifecycleScope.launch(Dispatchers.IO) {
-            runDemo()
-        }
-        
-        Toast.makeText(this, "Demo started - simulating glove sensor data", Toast.LENGTH_SHORT).show()
-        android.util.Log.d("Demo", "Demo started successfully")
+    /**
+     * Update the connection status display.
+     */
+    private fun updateConnectionStatus(status: String) {
+        connectionStatusText.text = status
     }
     
-    private fun stopDemo() {
-        if (!isDemoRunning) {
-            Toast.makeText(this, "Demo is not running", Toast.LENGTH_SHORT).show()
-            return
-        }
-        
-        android.util.Log.d("Demo", "Stopping demo...")
-        android.util.Log.d("Demo", "Before stop: isDemoRunning=$isDemoRunning, demoJob=$demoJob")
-        isDemoRunning = false
-        demoJob?.cancel()
-        demoJob = null
-        android.util.Log.d("Demo", "After stop: isDemoRunning=$isDemoRunning, demoJob=$demoJob")
-        
-        // Stop the fusion stream
-        streamJob?.cancel()
-        streamJob = null
-        
-        // Reset demo state
-        if (::sequenceBuffer.isInitialized) {
-            sequenceBuffer.clear()
-        }
-        if (::fusionDemo.isInitialized) {
-            fusionDemo.reset()
-        }
-        
-        updateDemoUI()
-        Toast.makeText(this, "Demo stopped", Toast.LENGTH_SHORT).show()
-        android.util.Log.d("Demo", "Demo stopped successfully")
-    }
-    
-    private fun updateDemoUI() {
-        startDemoButton.isEnabled = !isDemoRunning
-        stopDemoButton.isEnabled = isDemoRunning
-        
-        val statusText = if (isDemoRunning) {
-            "Demo: Running - Simulating glove data..."
-        } else {
-            "Demo: Ready to start"
-        }
-        demoStatusText.text = statusText
-    }
-    
-    private suspend fun runDemo() = coroutineScope {
-        if (!::fusionDemo.isInitialized) {
-            withContext(Dispatchers.Main) {
-                Toast.makeText(this@MainActivity, "Fusion model not initialized", Toast.LENGTH_SHORT).show()
-            }
-            return@coroutineScope
-        }
-        
-        var lastPrediction = ""
-        var stableCount = 0
-        val STABILITY_THRESHOLD = 1  // Require only 1 consecutive prediction for testing
-        var lastPredictionTime = 0L
-        val minPredictionInterval = 200L // 200ms minimum between predictions to prevent crashes
-        var patternCycleCounter = 0
-        var lettersAdded = 0
-        var loopIterations = 0
-        
-        withContext(Dispatchers.Main) {
-            demoStatusText.text = "Demo: Running - Analyzing gestures..."
-        }
-        
-        while (isDemoRunning) {
-            try {
-                // Check if coroutine is still active
-                if (!isActive) {
-                    android.util.Log.d("Demo", "Coroutine is not active, breaking demo loop")
-                    break
-                }
-                
-                // Check if demo is still running (user might have stopped it)
-                if (!isDemoRunning) {
-                    android.util.Log.d("Demo", "Demo stopped by user, breaking demo loop")
-                    break
-                }
-                
-                // Debug: Log that we're still in the main loop
-                loopIterations++
-                android.util.Log.d("Demo", "Main loop iteration #$loopIterations, isDemoRunning=$isDemoRunning, lettersAdded=$lettersAdded")
-                
-                // Cycle through patterns every 50 iterations to force different predictions
-                patternCycleCounter++
-                if (patternCycleCounter % 50 == 0) {
-                    val patternIndex = (patternCycleCounter / 50) % 5
-                    fusionDemo.jumpToPattern(patternIndex)
-                    android.util.Log.d("Demo", "Cycling to pattern $patternIndex")
-                }
-                
-                // Get next sensor reading from demo source
-                val features = fusionDemo.nextFeatures()
-                if (features == null) {
-                    android.util.Log.w("Demo", "No features received from demo source")
-                    kotlinx.coroutines.delay(100L)
-                    continue
-                }
-                
-                android.util.Log.d("Demo", "Received features: ${features.joinToString { "%.3f".format(it) }}")
-                
-                // Add to buffer
-                sequenceBuffer.add(features)
-                
-                android.util.Log.d("Demo", "Buffer size: ${sequenceBuffer.size()}/${fusionClassifier.getSequenceLength()}, Letters added: $lettersAdded")
-                
-                // Only predict when buffer has enough data (at least 50% full)
-                val bufferThreshold = fusionClassifier.getSequenceLength() / 2
-                android.util.Log.d("Demo", "Buffer check: ${sequenceBuffer.size()}/$bufferThreshold (need $bufferThreshold for prediction)")
-                
-                if (sequenceBuffer.size() >= bufferThreshold) {
-                    try {
-                        // Get sequence from buffer
-                        val sequence = sequenceBuffer.getSequence()
-                        if (sequence == null) {
-                            android.util.Log.w("Demo", "No sequence available from buffer")
-                            continue
-                        }
-                        
-                        android.util.Log.d("Demo", "Got sequence with ${sequence.size} timesteps")
-                        
-                        // Rate limiting to prevent crashes
-                        val currentTime = System.currentTimeMillis()
-                        if (currentTime - lastPredictionTime < minPredictionInterval) {
-                            kotlinx.coroutines.delay(minPredictionInterval - (currentTime - lastPredictionTime))
-                        }
-                        lastPredictionTime = currentTime
-                        
-                        // Run fusion prediction
-                        android.util.Log.d("Demo", "Making prediction with ${sequence.size} timesteps...")
-                        val pred = fusionClassifier.predict(sequence)
-                        if (pred == null) {
-                            android.util.Log.w("Demo", "Prediction returned null, skipping")
-                            continue
-                        }
-                        
-                        android.util.Log.d("Demo", "Got prediction: ${pred.label} (${(pred.probability * 100).toInt()}%)")
-                    
-                        android.util.Log.d("Demo", 
-                            "Buffer: ${sequenceBuffer.size()}/${fusionClassifier.getSequenceLength()}, " +
-                            "Prediction: $pred"
-                        )
-                        
-                        // Update status with current prediction
-                        try {
-                            withContext(Dispatchers.Main) {
-                                if (::demoStatusText.isInitialized) {
-                                    demoStatusText.text = "Demo: Running - Last prediction: ${pred.label} (${(pred.probability * 100).toInt()}%)"
-                                }
-                            }
-                        } catch (e: Exception) {
-                            android.util.Log.w("Demo", "Error updating status display: ${e.message}")
-                        }
-                        
-                        // Stability check: only add prediction if it's stable
-                        if (pred.label == lastPrediction) {
-                            stableCount++
-                        } else {
-                            lastPrediction = pred.label
-                            stableCount = 1
-                        }
-                        
-                        // Debug logging
-                        android.util.Log.d("Demo", 
-                            "Stability check: pred=${pred.label}, last=$lastPrediction, stable=$stableCount/$STABILITY_THRESHOLD, conf=${(pred.probability * 100).toInt()}%"
-                        )
-                        
-                    // Add to input if prediction is stable and confident
-                    if (stableCount >= STABILITY_THRESHOLD && 
-                        pred.probability >= 0.2f) {  // Even further reduced to 0.2f for testing
-                        // Temporarily removed Neutral filter to test
-                            
-                            android.util.Log.d("Demo", "Adding letter to text: ${pred.label}")
-                            
-                            try {
-                                withContext(Dispatchers.Main) {
-                                    if (::inputEdit.isInitialized) {
-                                        inputEdit.append(pred.label)
-                                    }
-                                    
-                                    // Speak the prediction if TTS is enabled
-                                    if (ttsEnabled) {
-                                        tts.speak(pred.label, TextToSpeech.QUEUE_FLUSH, null, null)
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                android.util.Log.w("Demo", "Error updating text input: ${e.message}")
-                            }
-                            
-                            // Reset for next gesture
-                            stableCount = 0
-                            lastPrediction = ""
-                            sequenceBuffer.clear()  // Clear buffer for next gesture
-                            
-                            // Cycle to next pattern after adding a letter
-                            lettersAdded++
-                            val nextPattern = (lettersAdded % 5)
-                            fusionDemo.jumpToPattern(nextPattern)
-                            android.util.Log.d("Demo", "Added letter ${pred.label} (#$lettersAdded), cycling to pattern $nextPattern")
-                            
-                            // Reset pattern cycle counter to ensure fresh start
-                            patternCycleCounter = 0
-                            
-                            // Small delay to avoid rapid repeated predictions
-                            kotlinx.coroutines.delay(200L)
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.e("Demo", "Error during prediction: ${e.message}", e)
-                        // Continue demo even if one prediction fails
-                    }
-                }
-                
-                // Small delay between samples (20 Hz = 50ms)
-                kotlinx.coroutines.delay(50L)
-                
-            } catch (e: Exception) {
-                android.util.Log.e("Demo", "Error in demo loop: ${e.message}", e)
-                // If there's a critical error, stop the demo
-                if (e.message?.contains("Fatal") == true || e.message?.contains("Critical") == true) {
-                    android.util.Log.e("Demo", "Critical error, stopping demo")
-                    withContext(Dispatchers.Main) {
-                        stopDemo()
-                    }
-                    break
-                }
-                kotlinx.coroutines.delay(100L)
-            }
-        }
-        
-        // Demo finished
-        withContext(Dispatchers.Main) {
-            if (isDemoRunning) {
-                demoStatusText.text = "Demo: Finished"
-            }
-        }
+    companion object {
+        const val BLUETOOTH_CONNECT_REQUEST = 2001
+        const val EXTRA_BLUETOOTH_SOCKET = "bluetooth_socket"
     }
 
     override fun onRequestPermissionsResult(
@@ -595,10 +317,20 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         if (requestCode == BLUETOOTH_PERMISSION_REQUEST) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 Toast.makeText(this, "Bluetooth permission granted", Toast.LENGTH_SHORT).show()
-                startActivity(Intent(this, BluetoothActivity::class.java))
+                checkBluetoothPermissionAndConnect()
             } else {
                 Toast.makeText(this, "Bluetooth permission denied", Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+    
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        // This will be called when returning from BluetoothActivity with a connection
+        // The BluetoothActivity will pass back connection details when ready
+        if (requestCode == BLUETOOTH_CONNECT_REQUEST && resultCode == RESULT_OK) {
+            // Connection established - will be handled via shared preferences or intent extras
+            updateConnectionStatus("Connected to glove")
         }
     }
 }

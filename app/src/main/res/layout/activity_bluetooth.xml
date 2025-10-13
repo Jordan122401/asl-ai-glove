@@ -4,28 +4,76 @@
     android:background="@color/dark_blue"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="16dp"
-    android:gravity="center">
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Connect to ASL Glove"
+        android:textSize="24sp"
+        android:textColor="@android:color/white"
+        android:gravity="center"
+        android:layout_marginBottom="16dp"
+        android:fontFamily="sans-serif-medium"/>
+
+    <!-- Status Text -->
+    <TextView
+        android:id="@+id/textStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Bluetooth Status: Unknown"
+        android:textSize="16sp"
+        android:textColor="@android:color/white"
+        android:layout_marginBottom="16dp"/>
 
     <!-- Check Permission Button -->
     <Button
         android:id="@+id/buttonCheckPermission"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Check Bluetooth Permission"
-        android:layout_marginBottom="16dp"/>
+        android:layout_marginBottom="8dp"/>
 
     <!-- Turn On Bluetooth Button -->
     <Button
         android:id="@+id/buttonTurnOnBluetooth"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Turn On Bluetooth"/>
+        android:text="Turn On Bluetooth"
+        android:layout_marginBottom="8dp"/>
+    
+    <!-- Scan for Devices Button -->
+    <Button
+        android:id="@+id/buttonScanDevices"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Scan for Devices"
+        android:layout_marginBottom="16dp"/>
 
+    <!-- Paired Devices Section -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Paired Devices:"
+        android:textSize="18sp"
+        android:textColor="@android:color/white"
+        android:fontFamily="sans-serif-medium"
+        android:layout_marginBottom="8dp"/>
+
+    <!-- Device List -->
+    <ListView
+        android:id="@+id/listViewDevices"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="@android:color/white"
+        android:layout_marginBottom="16dp"/>
+
+    <!-- Back Button -->
     <Button
         android:id="@+id/buttonBack"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Back to Main"
-        android:layout_marginTop="16dp"/>
+        android:backgroundTint="@android:color/darker_gray"/>
 </LinearLayout>
