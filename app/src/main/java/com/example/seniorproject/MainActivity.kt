@@ -29,6 +29,9 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.Job
 import com.example.seniorproject.data.SensorSource
 import com.example.seniorproject.data.SequenceBuffer
+import com.example.seniorproject.data.UserManager
+import com.example.seniorproject.data.User
+import com.example.seniorproject.data.CalibrationData
 
 class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
@@ -39,12 +42,18 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var bluetoothButton: Button
     private lateinit var clearTextButton: Button
     private lateinit var connectionStatusText: TextView
+    private lateinit var currentUserText: TextView
     private lateinit var tts: TextToSpeech
     
     // Fusion classifier and sensor source
     private lateinit var fusionClassifier: FusionASLClassifier
     private var sensorSource: SensorSource? = null
     private lateinit var sequenceBuffer: SequenceBuffer
+    
+    // User management
+    private lateinit var userManager: UserManager
+    private var currentUser: User? = null
+    private var calibrationData: CalibrationData? = null
     
     private lateinit var inputEdit: EditText
     private var ttsEnabled = true
@@ -60,6 +69,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         setContentView(R.layout.activity_main)
 
         inputEdit = findViewById(R.id.inputText)
+        
+        // Initialize user management
+        userManager = UserManager(this)
+        loadCurrentUser()
         
         // Initialize fusion model
         initFusionModel()
@@ -79,6 +92,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         bluetoothButton = findViewById(R.id.checkBluetoothButton)
         clearTextButton = findViewById(R.id.clearTextButton)
         connectionStatusText = findViewById(R.id.connectionStatusText)
+        currentUserText = findViewById(R.id.currentUserText)
 
         // Initialize TTS
         tts = TextToSpeech(this, this)
@@ -110,6 +124,42 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         clearTextButton.setOnClickListener {
             editTextInput.text.clear()
             textViewResult.text = ""
+        }
+        
+        // Display current user info
+        updateUserDisplay()
+    }
+    
+    /**
+     * Load the current user and their calibration data.
+     */
+    private fun loadCurrentUser() {
+        currentUser = userManager.getCurrentUser()
+        calibrationData = currentUser?.calibrationData
+        
+        if (currentUser != null) {
+            android.util.Log.d("MainActivity", "Loaded user: ${currentUser?.username}, Calibrated: ${currentUser?.isCalibrated}")
+            if (calibrationData != null) {
+                android.util.Log.d("MainActivity", "Calibration data loaded for ${currentUser?.username}")
+            }
+        } else {
+            android.util.Log.w("MainActivity", "No current user set! Redirecting to user selection...")
+            // If no user is set, redirect to user selection
+            val intent = Intent(this, UserSelectionActivity::class.java)
+            startActivity(intent)
+            finish()
+        }
+    }
+    
+    /**
+     * Update the UI to display current user information.
+     */
+    private fun updateUserDisplay() {
+        currentUser?.let { user ->
+            val calibrationStatus = if (user.isCalibrated) "✓" else "✗"
+            val statusMessage = "User: ${user.username} $calibrationStatus"
+            currentUserText.text = statusMessage
+            android.util.Log.d("MainActivity", statusMessage)
         }
     }
 
@@ -170,7 +220,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             while (isActive && isConnected) {
                 try {
                     // Get next sensor reading from glove
-                    val features = sensorSource?.nextFeatures()
+                    var features = sensorSource?.nextFeatures()
                     
                     if (features == null) {
                         android.util.Log.w("Inference", "No features received, checking connection...")
@@ -179,6 +229,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                             stopInferenceStream()
                         }
                         break
+                    }
+                    
+                    // Apply calibration if available
+                    if (calibrationData != null) {
+                        features = calibrationData!!.normalizeAllSensors(features)
                     }
                     
                     // Add to buffer

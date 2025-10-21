@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import android.content.Intent
+import com.example.seniorproject.data.UserManager
 
 
 class SettingsActivity : AppCompatActivity() {
@@ -21,6 +22,12 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var speechRatePreview: TextView
 
     private lateinit var languageSpinner: Spinner
+    
+    // User management
+    private lateinit var currentUserDisplay: TextView
+    private lateinit var recalibrateButton: Button
+    private lateinit var switchUserButton: Button
+    private lateinit var userManager: UserManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val prefs = getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
@@ -32,6 +39,9 @@ class SettingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
+        // Initialize UserManager
+        userManager = UserManager(this)
+
         // Initialize views
         fontSizeSpinner = findViewById(R.id.fontSizeSpinner)
         ttsRadioGroup = findViewById(R.id.ttsRadioGroup)
@@ -39,6 +49,9 @@ class SettingsActivity : AppCompatActivity() {
         fontPreview = findViewById(R.id.fontPreview)
         ttsPreview = findViewById(R.id.ttsPreview)
         themeSpinner = findViewById(R.id.themeSpinner)
+        currentUserDisplay = findViewById(R.id.currentUserDisplay)
+        recalibrateButton = findViewById(R.id.recalibrateButton)
+        switchUserButton = findViewById(R.id.switchUserButton)
 
         // Theme
         val themes = arrayOf("Light", "Dark")
@@ -137,7 +150,43 @@ class SettingsActivity : AppCompatActivity() {
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
             finishAffinity() // return to MainActivity
-
+        }
+        
+        // Display current user
+        updateCurrentUserDisplay()
+        
+        // Recalibrate button
+        recalibrateButton.setOnClickListener {
+            val currentUser = userManager.getCurrentUser()
+            if (currentUser != null) {
+                val intent = Intent(this, CalibrationActivity::class.java)
+                intent.putExtra("username", currentUser.username)
+                startActivity(intent)
+            } else {
+                Toast.makeText(this, "No user selected", Toast.LENGTH_SHORT).show()
+            }
+        }
+        
+        // Switch user button
+        switchUserButton.setOnClickListener {
+            // Clear current user and go to user selection
+            val intent = Intent(this, UserSelectionActivity::class.java)
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+            finishAffinity()
+        }
+    }
+    
+    /**
+     * Update the display of the current user.
+     */
+    private fun updateCurrentUserDisplay() {
+        val currentUser = userManager.getCurrentUser()
+        if (currentUser != null) {
+            val calibrationStatus = if (currentUser.isCalibrated) "✓ Calibrated" else "✗ Not Calibrated"
+            currentUserDisplay.text = "Current User: ${currentUser.username} ($calibrationStatus)"
+        } else {
+            currentUserDisplay.text = "Current User: None"
         }
     }
 }

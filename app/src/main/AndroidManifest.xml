@@ -23,13 +23,20 @@
             android:label="@string/title_activity_settings"
             android:theme="@style/Theme.SeniorProject.Light" />
         <activity
-            android:name=".MainActivity"
+            android:name=".CalibrationActivity"
+            android:exported="false"
+            android:theme="@style/Theme.SeniorProject.Light" />
+        <activity
+            android:name=".UserSelectionActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".MainActivity"
+            android:exported="false" />
     </application>
 
 
