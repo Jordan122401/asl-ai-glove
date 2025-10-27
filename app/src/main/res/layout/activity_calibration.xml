@@ -184,10 +184,46 @@
             android:id="@+id/saveCalibrationButton"
             android:layout_width="match_parent"
             android:layout_height="56dp"
-            android:text="Save Calibration"
+            android:text="Start Streaming"
             android:textSize="16sp"
             android:enabled="false"
             android:layout_marginBottom="8dp"/>
+
+        <!-- Command Input Section -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Send Command to Glove:"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:textColor="?attr/colorOnSurface"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="4dp"/>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <EditText
+                android:id="@+id/commandInput"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:hint="Enter command (e.g., 'cal', 'imu_cal', 'detail')"
+                android:inputType="text"
+                android:textSize="14sp"
+                android:padding="12dp"
+                android:layout_marginEnd="8dp"/>
+
+            <Button
+                android:id="@+id/sendCommandButton"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:text="Send"
+                android:enabled="false"/>
+        </LinearLayout>
 
         <Button
             android:id="@+id/importCalibrationButton"

@@ -7,24 +7,16 @@ This guide explains how to connect your ASL translation glove to the mobile app 
 ## 🔧 Prerequisites
 
 1. **Android Device** with Bluetooth 4.0+ support
-2. **ASL Glove** with Bluetooth module configured
-3. **Bluetooth Permissions** granted to the app
-4. **Glove paired** with your Android device
+2. **ASL Glove** with Bluetooth module configured and powered on
+3. **Bluetooth Permissions** granted to the app (will be prompted)
 
 ---
 
 ## 🚀 Connection Steps
 
-### Step 1: Pair Your Glove
+### Step 1: Power On Your Glove
 
-Before using the app, you need to pair the glove with your Android device:
-
-1. **Open Android Settings** → Bluetooth
-2. **Turn on Bluetooth** if not already enabled
-3. **Power on your ASL glove** (make it discoverable)
-4. **Look for your glove** in available devices (e.g., "ASL_Glove" or similar)
-5. **Tap to pair** - enter PIN if required (usually 0000 or 1234)
-6. **Wait for pairing** confirmation
+Make sure your ASL glove is powered on and in discovery/pairing mode. Most gloves will automatically enter this mode when powered on.
 
 ### Step 2: Launch the App
 
@@ -41,15 +33,20 @@ Before using the app, you need to pair the glove with your Android device:
 2. **Grant Bluetooth permissions** if prompted
 3. You'll be taken to the **Bluetooth Connection Screen**
 
-### Step 4: Select and Connect
+### Step 4: Scan and Select Your Glove
 
 In the Bluetooth screen:
 
-1. **Check Bluetooth Status** - should show "ON"
-2. **Tap "Scan for Devices"** to list paired devices
-3. **Select your glove** from the list (tap on it)
-4. **Wait for connection** - status will update
-5. **Return to main screen** when connected
+1. **Check Bluetooth Status** - should show "ON" (tap "Turn On Bluetooth" if needed)
+2. **Grant permissions** if prompted (tap "Check Bluetooth Permission" if needed)
+3. **Tap "Scan for Devices"** to discover nearby Bluetooth devices
+4. **Wait for scan to complete** - the app will discover all nearby devices
+5. **Look for your glove** in the device list (it may show as "Unknown Device" or have its Bluetooth name)
+6. **Tap on your glove** to connect
+7. **Wait for connection** - status will update
+8. **Return to main screen** when connected successfully
+
+> **Note:** The app can now discover devices that aren't previously paired! No need to pair in Android Settings first.
 
 ---
 

@@ -4,11 +4,19 @@ import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
-import android.content.Intent
+import android.bluetooth.le.BluetoothLeScanner
+import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanFilter
+import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.ParcelUuid
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.ListView
@@ -37,13 +45,22 @@ class BluetoothActivity : AppCompatActivity() {
     private val REQUEST_ENABLE_BT = 2001
     
     private lateinit var bluetoothAdapter: BluetoothAdapter
+    private var bluetoothLeScanner: BluetoothLeScanner? = null
     private var pairedDevices: Set<BluetoothDevice>? = null
     private var deviceList: ArrayList<String> = ArrayList()
     private var deviceAddressList: ArrayList<String> = ArrayList()
     private lateinit var adapter: ArrayAdapter<String>
     
-    // Standard UUID for Serial Port Profile (SPP)
+    // Standard UUID for Serial Port Profile (SPP) - Classic Bluetooth
     private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+    
+    // Nordic UART Service UUID for BLE (from ASL_BLE.ino)
+    private val NUS_SERVICE_UUID = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
+    
+    // For device discovery
+    private var isDiscovering = false
+    private val discoveredDevices = HashMap<String, BluetoothDevice>()
+    private val bleScanCallback = BLEScanCallback()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val prefs = getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
@@ -70,6 +87,9 @@ class BluetoothActivity : AppCompatActivity() {
             finish()
             return
         }
+        
+        // Initialize BLE Scanner
+        bluetoothLeScanner = bluetoothAdapter.bluetoothLeScanner
 
         // Setup ListView adapter
         adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, deviceList)
@@ -89,9 +109,9 @@ class BluetoothActivity : AppCompatActivity() {
             }
         }
         
-        // Scan for paired devices
+        // Scan for devices (both paired and discovered)
         buttonScan.setOnClickListener {
-            scanForPairedDevices()
+            startBLEScan()
         }
 
         // Back button
@@ -108,8 +128,169 @@ class BluetoothActivity : AppCompatActivity() {
             }
         }
         
+        // Register for Bluetooth discovery events
+        registerBluetoothReceiver()
+        
         // Update initial status
         updateBluetoothStatus()
+    }
+    
+    inner class BLEScanCallback : ScanCallback() {
+        override fun onScanResult(callbackType: Int, result: ScanResult) {
+            val device = result.device
+            val deviceName = result.scanRecord?.deviceName ?: device.name ?: "Unknown Device"
+            
+            // Check if it's an ASL glove (contains "ASL" in name or has NUS service)
+            val isASLGlove = deviceName.contains("ASL", ignoreCase = true) || 
+                           result.scanRecord?.serviceUuids?.any { 
+                               it.uuid.toString().contains("6E400001", ignoreCase = true) 
+                           } == true
+            
+            if (isASLGlove) {
+                discoveredDevices[device.address] = device
+                updateDeviceList()
+            }
+        }
+        
+        override fun onBatchScanResults(results: List<ScanResult>) {
+            for (result in results) {
+                // Use callback type 1 for batch scan results
+                onScanResult(1, result)
+            }
+        }
+        
+        override fun onScanFailed(errorCode: Int) {
+            runOnUiThread {
+                Toast.makeText(this@BluetoothActivity, "BLE Scan failed: $errorCode", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    
+    private fun startBLEScan() {
+        if (!bluetoothAdapter.isEnabled) {
+            Toast.makeText(this, "Please turn on Bluetooth first", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        // Check permissions
+        val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val hasConnect = ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+            val hasScan = ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
+            hasConnect && hasScan
+        } else {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        }
+        
+        if (!hasPermission) {
+            Toast.makeText(this, "Bluetooth permissions required", Toast.LENGTH_SHORT).show()
+            checkBluetoothPermission()
+            return
+        }
+        
+        try {
+            // Clear previous results
+            discoveredDevices.clear()
+            deviceList.clear()
+            deviceAddressList.clear()
+            adapter.notifyDataSetChanged()
+            
+            // Stop any previous scan
+            bluetoothLeScanner?.stopScan(bleScanCallback)
+            
+            // Configure scan settings for low latency
+            val scanSettings = ScanSettings.Builder()
+                .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                .build()
+            
+            // Optional: Filter for NUS service UUID
+            val nusUUID = ParcelUuid.fromString(NUS_SERVICE_UUID)
+            val scanFilter = ScanFilter.Builder()
+                .setServiceUuid(nusUUID)
+                .build()
+            
+            // Start BLE scan
+            bluetoothLeScanner?.startScan(listOf(scanFilter), scanSettings, bleScanCallback)
+            
+            updateStatus("Scanning for BLE devices...")
+            Toast.makeText(this, "Starting BLE scan for ASL glove...", Toast.LENGTH_SHORT).show()
+            
+            // Auto-stop scan after 10 seconds
+            textStatus.postDelayed({
+                bluetoothLeScanner?.stopScan(bleScanCallback)
+                updateStatus("Scan complete. Found ${deviceList.size} device(s).")
+            }, 10000)
+            
+        } catch (e: SecurityException) {
+            Toast.makeText(this, "Permission denied: ${e.message}", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Scan failed: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    private fun registerBluetoothReceiver() {
+        val filter = IntentFilter().apply {
+            addAction(BluetoothDevice.ACTION_FOUND)
+            addAction(BluetoothAdapter.ACTION_DISCOVERY_STARTED)
+            addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
+        }
+        registerReceiver(bluetoothReceiver, filter)
+    }
+    
+    // Broadcast receiver for Bluetooth discovery
+    private val bluetoothReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                BluetoothDevice.ACTION_FOUND -> {
+                    val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                    }
+                    
+                    device?.let {
+                        discoveredDevices[it.address] = it
+                        updateDeviceList()
+                    }
+                }
+                
+                BluetoothAdapter.ACTION_DISCOVERY_STARTED -> {
+                    isDiscovering = true
+                    updateStatus("Scanning for devices...")
+                    Toast.makeText(this@BluetoothActivity, "Scanning for devices...", Toast.LENGTH_SHORT).show()
+                }
+                
+                BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
+                    isDiscovering = false
+                    val totalDevices = deviceList.size
+                    updateStatus("Found $totalDevices device(s). Tap to connect.")
+                    Toast.makeText(
+                        this@BluetoothActivity,
+                        "Scan complete. Found $totalDevices device(s)",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
+    }
+    
+    private fun updateDeviceList() {
+        deviceList.clear()
+        deviceAddressList.clear()
+        
+        // Add discovered devices
+        for ((address, device) in discoveredDevices) {
+            val deviceName = device.name ?: "Unknown Device"
+            val displayText = if (device.bondState == BluetoothDevice.BOND_BONDED) {
+                "$deviceName (Paired)\n$address [BLE]"
+            } else {
+                "$deviceName\n$address [BLE]"
+            }
+            deviceList.add(displayText)
+            deviceAddressList.add(address)
+        }
+        
+        adapter.notifyDataSetChanged()
     }
     
     private fun updateBluetoothStatus() {
@@ -127,56 +308,31 @@ class BluetoothActivity : AppCompatActivity() {
 
     private fun checkBluetoothPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val permission = Manifest.permission.BLUETOOTH_CONNECT
-            if (ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED) {
-                Toast.makeText(this, "Bluetooth permission granted ✅", Toast.LENGTH_SHORT).show()
-                updateStatus("Bluetooth Status: Permission Granted")
+            val permissions = arrayOf(
+                Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            )
+            
+            val allGranted = permissions.all { permission ->
+                ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+            }
+            
+            if (allGranted) {
+                Toast.makeText(this, "All Bluetooth permissions granted ✅", Toast.LENGTH_SHORT).show()
+                updateStatus("Bluetooth Status: All Permissions Granted")
             } else {
-                Toast.makeText(this, "Bluetooth permission NOT granted ❌", Toast.LENGTH_SHORT).show()
-                ActivityCompat.requestPermissions(this, arrayOf(permission), PERMISSION_REQUEST_CODE)
+                ActivityCompat.requestPermissions(this, permissions, PERMISSION_REQUEST_CODE)
             }
         } else {
-            Toast.makeText(this, "Bluetooth permission automatically granted ✅", Toast.LENGTH_SHORT).show()
-            updateStatus("Bluetooth Status: Permission Granted")
-        }
-    }
-    
-    private fun scanForPairedDevices() {
-        if (!bluetoothAdapter.isEnabled) {
-            Toast.makeText(this, "Please turn on Bluetooth first", Toast.LENGTH_SHORT).show()
-            return
-        }
-        
-        // Check permissions
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) 
-                != PackageManager.PERMISSION_GRANTED) {
-                Toast.makeText(this, "Bluetooth permission required", Toast.LENGTH_SHORT).show()
-                checkBluetoothPermission()
-                return
-            }
-        }
-        
-        try {
-            pairedDevices = bluetoothAdapter.bondedDevices
-            
-            deviceList.clear()
-            deviceAddressList.clear()
-            
-            if (pairedDevices.isNullOrEmpty()) {
-                Toast.makeText(this, "No paired devices found", Toast.LENGTH_SHORT).show()
-                updateStatus("No paired devices. Please pair your glove first.")
+            // For older Android versions, just check location permission
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) 
+                == PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "Location permission granted ✅", Toast.LENGTH_SHORT).show()
+                updateStatus("Bluetooth Status: Permission Granted")
             } else {
-                for (device in pairedDevices!!) {
-                    deviceList.add("${device.name}\n${device.address}")
-                    deviceAddressList.add(device.address)
-                }
-                adapter.notifyDataSetChanged()
-                updateStatus("Found ${pairedDevices!!.size} paired device(s). Tap to connect.")
-                Toast.makeText(this, "Found ${pairedDevices!!.size} paired devices", Toast.LENGTH_SHORT).show()
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), PERMISSION_REQUEST_CODE)
             }
-        } catch (e: SecurityException) {
-            Toast.makeText(this, "Permission denied: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
     
@@ -187,63 +343,84 @@ class BluetoothActivity : AppCompatActivity() {
             try {
                 val device = bluetoothAdapter.getRemoteDevice(address)
                 
-                // Create a socket connection
-                val socket: BluetoothSocket = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    if (ContextCompat.checkSelfPermission(this@BluetoothActivity, Manifest.permission.BLUETOOTH_CONNECT) 
-                        != PackageManager.PERMISSION_GRANTED) {
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(this@BluetoothActivity, "Bluetooth permission required", Toast.LENGTH_SHORT).show()
+                // Check if this is a BLE device
+                val isBLE = device.type == BluetoothDevice.DEVICE_TYPE_LE || 
+                           device.type == BluetoothDevice.DEVICE_TYPE_DUAL
+                
+                if (isBLE) {
+                    // For BLE, we need to use BluetoothGatt
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(
+                            this@BluetoothActivity,
+                            "BLE device detected. Connection in progress...",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        
+                        // Store device info for BLE connection
+                        val prefs = getSharedPreferences("BluetoothConnection", Context.MODE_PRIVATE)
+                        prefs.edit().apply {
+                            putString("device_address", address)
+                            putString("device_name", name)
+                            putBoolean("is_connected", true)
+                            putBoolean("is_ble", true)
+                            apply()
                         }
-                        return@launch
+                        
+                        setResult(RESULT_OK)
+                        Toast.makeText(
+                            this@BluetoothActivity,
+                            "Returning to main screen...",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        
+                        finish()
                     }
-                    device.createRfcommSocketToServiceRecord(SPP_UUID)
                 } else {
-                    device.createRfcommSocketToServiceRecord(SPP_UUID)
-                }
-                
-                // Cancel discovery to save resources
-                if (bluetoothAdapter.isDiscovering) {
-                    bluetoothAdapter.cancelDiscovery()
-                }
-                
-                // Connect to the device
-                withContext(Dispatchers.Main) {
-                    updateStatus("Establishing connection...")
-                }
-                
-                socket.connect()
-                
-                withContext(Dispatchers.Main) {
-                    updateStatus("Connected to $name!")
-                    Toast.makeText(this@BluetoothActivity, "Successfully connected to $name", Toast.LENGTH_LONG).show()
-                    
-                    // Store connection info in shared preferences for MainActivity to use
-                    val prefs = getSharedPreferences("BluetoothConnection", Context.MODE_PRIVATE)
-                    prefs.edit().apply {
-                        putString("device_address", address)
-                        putString("device_name", name)
-                        putBoolean("is_connected", true)
-                        apply()
+                    // Classic Bluetooth connection (existing code)
+                    val socket: BluetoothSocket = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        if (ContextCompat.checkSelfPermission(this@BluetoothActivity, Manifest.permission.BLUETOOTH_CONNECT) 
+                            != PackageManager.PERMISSION_GRANTED) {
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(this@BluetoothActivity, "Bluetooth permission required", Toast.LENGTH_SHORT).show()
+                            }
+                            return@launch
+                        }
+                        device.createRfcommSocketToServiceRecord(SPP_UUID)
+                    } else {
+                        device.createRfcommSocketToServiceRecord(SPP_UUID)
                     }
                     
-                    // Return success to MainActivity
-                    setResult(RESULT_OK)
+                    if (bluetoothAdapter.isDiscovering) {
+                        bluetoothAdapter.cancelDiscovery()
+                    }
                     
-                    // Important: We'll pass the socket back via a singleton or service
-                    // For now, just indicate success and return
-                    Toast.makeText(
-                        this@BluetoothActivity,
-                        "Connection ready! Returning to main screen...",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    withContext(Dispatchers.Main) {
+                        updateStatus("Establishing connection...")
+                    }
                     
-                    // TODO: Implement proper socket handoff to MainActivity
-                    // Options:
-                    // 1. Use a Bluetooth service to manage the connection
-                    // 2. Use a singleton to hold the socket
-                    // 3. Pass via static reference (not recommended)
+                    socket.connect()
                     
-                    finish()
+                    withContext(Dispatchers.Main) {
+                        updateStatus("Connected to $name!")
+                        Toast.makeText(this@BluetoothActivity, "Successfully connected to $name", Toast.LENGTH_LONG).show()
+                        
+                        val prefs = getSharedPreferences("BluetoothConnection", Context.MODE_PRIVATE)
+                        prefs.edit().apply {
+                            putString("device_address", address)
+                            putString("device_name", name)
+                            putBoolean("is_connected", true)
+                            apply()
+                        }
+                        
+                        setResult(RESULT_OK)
+                        Toast.makeText(
+                            this@BluetoothActivity,
+                            "Connection ready! Returning to main screen...",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        
+                        finish()
+                    }
                 }
                 
             } catch (e: IOException) {
@@ -271,12 +448,12 @@ class BluetoothActivity : AppCompatActivity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == PERMISSION_REQUEST_CODE) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Toast.makeText(this, "Permission granted by user ✅", Toast.LENGTH_SHORT).show()
-                updateStatus("Bluetooth Status: Permission Granted")
+            if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+                Toast.makeText(this, "All permissions granted by user ✅", Toast.LENGTH_SHORT).show()
+                updateStatus("Bluetooth Status: All Permissions Granted")
             } else {
-                Toast.makeText(this, "Permission denied by user ❌", Toast.LENGTH_SHORT).show()
-                updateStatus("Bluetooth Status: Permission Denied")
+                Toast.makeText(this, "Some permissions denied by user ❌", Toast.LENGTH_SHORT).show()
+                updateStatus("Bluetooth Status: Some Permissions Denied")
             }
         }
     }
@@ -297,5 +474,26 @@ class BluetoothActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateBluetoothStatus()
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        // Stop BLE scan
+        bluetoothLeScanner?.stopScan(bleScanCallback)
+        
+        // Cancel discovery if active
+        if (bluetoothAdapter.isDiscovering) {
+            try {
+                bluetoothAdapter.cancelDiscovery()
+            } catch (e: Exception) {
+                // Ignore
+            }
+        }
+        // Unregister receiver
+        try {
+            unregisterReceiver(bluetoothReceiver)
+        } catch (e: Exception) {
+            // Receiver may not be registered
+        }
     }
 }
