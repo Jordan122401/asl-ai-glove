@@ -48,6 +48,7 @@ class CalibrationActivity : AppCompatActivity() {
     private lateinit var skipButton: Button
     private lateinit var commandInput: EditText
     private lateinit var sendCommandButton: Button
+    private var viewLogButton: Button? = null
     
     private lateinit var userManager: UserManager
     private var username: String = ""
@@ -99,6 +100,7 @@ class CalibrationActivity : AppCompatActivity() {
             calibrateImuButton = findViewById(R.id.calibrateFlexButton)
             viewCalibrationButton = findViewById(R.id.saveCalibrationButton)
             skipButton = findViewById(R.id.skipButton)
+            viewLogButton = findViewById(R.id.viewLogButton)
         } catch (e: Exception) {
             // Buttons not yet in layout, we'll handle that
         }
@@ -146,6 +148,12 @@ class CalibrationActivity : AppCompatActivity() {
 
             skipButton.setOnClickListener {
                 skipCalibration()
+            }
+            
+            viewLogButton?.setOnClickListener {
+                // Navigate to BLE log screen
+                val intent = Intent(this@CalibrationActivity, BLELogActivity::class.java)
+                startActivity(intent)
             }
         } catch (e: Exception) {
             android.util.Log.e("Calibration", "Error setting up buttons", e)
@@ -412,7 +420,7 @@ class CalibrationActivity : AppCompatActivity() {
             "detail", "info" -> {
                 sendCalibrationCommand("detail")
             }
-            "stream:on", "stream on" -> {
+            "stream", "stream on", "stream:on" -> {
                 startSensorStreaming()
             }
             "stream:off", "stream off" -> {

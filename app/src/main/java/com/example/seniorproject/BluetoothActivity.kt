@@ -17,6 +17,9 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.ParcelUuid
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.ListView
@@ -49,7 +52,7 @@ class BluetoothActivity : AppCompatActivity() {
     private var pairedDevices: Set<BluetoothDevice>? = null
     private var deviceList: ArrayList<String> = ArrayList()
     private var deviceAddressList: ArrayList<String> = ArrayList()
-    private lateinit var adapter: ArrayAdapter<String>
+    private lateinit var adapter: DeviceListAdapter
     
     // Standard UUID for Serial Port Profile (SPP) - Classic Bluetooth
     private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
@@ -60,6 +63,7 @@ class BluetoothActivity : AppCompatActivity() {
     // For device discovery
     private var isDiscovering = false
     private val discoveredDevices = HashMap<String, BluetoothDevice>()
+    private val deviceNames = HashMap<String, String>() // Store device names separately
     private val bleScanCallback = BLEScanCallback()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -91,8 +95,8 @@ class BluetoothActivity : AppCompatActivity() {
         // Initialize BLE Scanner
         bluetoothLeScanner = bluetoothAdapter.bluetoothLeScanner
 
-        // Setup ListView adapter
-        adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, deviceList)
+        // Setup ListView adapter with custom layout
+        adapter = DeviceListAdapter(this, deviceList, deviceAddressList)
         listViewDevices.adapter = adapter
 
         // Check Bluetooth Permission
@@ -148,6 +152,7 @@ class BluetoothActivity : AppCompatActivity() {
             
             if (isASLGlove) {
                 discoveredDevices[device.address] = device
+                deviceNames[device.address] = deviceName
                 updateDeviceList()
             }
         }
@@ -190,6 +195,7 @@ class BluetoothActivity : AppCompatActivity() {
         try {
             // Clear previous results
             discoveredDevices.clear()
+            deviceNames.clear()
             deviceList.clear()
             deviceAddressList.clear()
             adapter.notifyDataSetChanged()
@@ -250,6 +256,7 @@ class BluetoothActivity : AppCompatActivity() {
                     
                     device?.let {
                         discoveredDevices[it.address] = it
+                        deviceNames[it.address] = it.name ?: "Unknown Device"
                         updateDeviceList()
                     }
                 }
@@ -275,22 +282,24 @@ class BluetoothActivity : AppCompatActivity() {
     }
     
     private fun updateDeviceList() {
-        deviceList.clear()
-        deviceAddressList.clear()
-        
-        // Add discovered devices
-        for ((address, device) in discoveredDevices) {
-            val deviceName = device.name ?: "Unknown Device"
-            val displayText = if (device.bondState == BluetoothDevice.BOND_BONDED) {
-                "$deviceName (Paired)\n$address [BLE]"
-            } else {
-                "$deviceName\n$address [BLE]"
+        runOnUiThread {
+            deviceList.clear()
+            deviceAddressList.clear()
+            
+            // Add discovered devices
+            for ((address, device) in discoveredDevices) {
+                val deviceName = deviceNames[address] ?: device.name ?: "Unknown Device"
+                val displayText = if (device.bondState == BluetoothDevice.BOND_BONDED) {
+                    "$deviceName (Paired)"
+                } else {
+                    deviceName
+                }
+                deviceList.add(displayText)
+                deviceAddressList.add(address)
             }
-            deviceList.add(displayText)
-            deviceAddressList.add(address)
+            
+            adapter.notifyDataSetChanged()
         }
-        
-        adapter.notifyDataSetChanged()
     }
     
     private fun updateBluetoothStatus() {
@@ -494,6 +503,32 @@ class BluetoothActivity : AppCompatActivity() {
             unregisterReceiver(bluetoothReceiver)
         } catch (e: Exception) {
             // Receiver may not be registered
+        }
+    }
+    
+    // Custom adapter for device list
+    private class DeviceListAdapter(
+        context: Context,
+        private val deviceList: ArrayList<String>,
+        private val deviceAddressList: ArrayList<String>
+    ) : ArrayAdapter<String>(context, R.layout.item_device, deviceList) {
+        
+        override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+            val view = convertView ?: LayoutInflater.from(context)
+                .inflate(R.layout.item_device, parent, false)
+            
+            val deviceNameText = view.findViewById<TextView>(R.id.deviceNameText)
+            val deviceAddressText = view.findViewById<TextView>(R.id.deviceAddressText)
+            
+            if (position < deviceList.size && position < deviceAddressList.size) {
+                val deviceName = deviceList[position]
+                val deviceAddress = deviceAddressList[position]
+                
+                deviceNameText.text = deviceName
+                deviceAddressText.text = "$deviceAddress [BLE]"
+            }
+            
+            return view
         }
     }
 }

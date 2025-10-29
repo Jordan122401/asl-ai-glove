@@ -32,6 +32,12 @@ import com.example.seniorproject.data.SequenceBuffer
 import com.example.seniorproject.data.UserManager
 import com.example.seniorproject.data.User
 import com.example.seniorproject.data.CalibrationData
+import com.example.seniorproject.data.BLESensorSource
+import com.example.seniorproject.BLEService
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
+import kotlinx.coroutines.delay
 
 class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
@@ -41,6 +47,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var buttonSettings: Button
     private lateinit var bluetoothButton: Button
     private lateinit var clearTextButton: Button
+    private lateinit var startStreamButton: Button
+    private lateinit var stopStreamButton: Button
     private lateinit var connectionStatusText: TextView
     private lateinit var currentUserText: TextView
     private lateinit var tts: TextToSpeech
@@ -49,6 +57,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var fusionClassifier: FusionASLClassifier
     private var sensorSource: SensorSource? = null
     private lateinit var sequenceBuffer: SequenceBuffer
+    private var bleSensorSource: BLESensorSource? = null
+    private var bleService: BLEService? = null
     
     // User management
     private lateinit var userManager: UserManager
@@ -61,7 +71,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private val BLUETOOTH_PERMISSION_REQUEST = 1001
 
     private var inferenceJob: Job? = null
-    private var isConnected = false
+    private var isStreaming = false // Track if streaming is active
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -91,6 +101,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         buttonSettings = findViewById(R.id.settingsButton)
         bluetoothButton = findViewById(R.id.checkBluetoothButton)
         clearTextButton = findViewById(R.id.clearTextButton)
+        startStreamButton = findViewById(R.id.startStreamButton)
+        stopStreamButton = findViewById(R.id.stopStreamButton)
         connectionStatusText = findViewById(R.id.connectionStatusText)
         currentUserText = findViewById(R.id.currentUserText)
 
@@ -126,8 +138,59 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             textViewResult.text = ""
         }
         
+        // Start Stream button
+        startStreamButton.setOnClickListener {
+            startInferenceStream()
+            updateStreamButtons()
+        }
+        
+        // Stop Stream button
+        stopStreamButton.setOnClickListener {
+            stopInferenceStream()
+            updateStreamButtons()
+        }
+        
         // Display current user info
         updateUserDisplay()
+        
+        // Initialize BLE service and sensor source
+        initBLEComponents()
+        
+        // Initial button state
+        updateStreamButtons()
+    }
+    
+    /**
+     * Update the enabled state of stream buttons based on connection status.
+     */
+    private fun updateStreamButtons() {
+        val isConnected = bleService?.isConnected() == true
+        startStreamButton.isEnabled = isConnected && !isStreaming
+        stopStreamButton.isEnabled = isConnected && isStreaming
+    }
+    
+    /**
+     * Initialize BLE service and sensor source for receiving glove data.
+     */
+    private fun initBLEComponents() {
+        bleSensorSource = BLESensorSource()
+        bleService = BLEService(this).apply {
+            onConnectionStateChange = { connected ->
+                runOnUiThread {
+                    if (connected) {
+                        updateConnectionStatus("Connected to glove")
+                    } else {
+                        updateConnectionStatus("Disconnected")
+                        stopInferenceStream()
+                    }
+                    updateStreamButtons()
+                }
+            }
+            onDataReceived = { data ->
+                // Forward received data to sensor source for parsing
+                bleSensorSource?.onDataReceived(data)
+            }
+        }
     }
     
     /**
@@ -204,97 +267,120 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
     
     /**
-     * Start real-time inference stream from the connected sensor source.
+     * Start real-time inference stream from the connected BLE sensor source.
+     * 
+     * With ASL_BLE_FINAL firmware, the glove automatically sends batches of exactly
+     * 75 samples with a 1-second gap between batches. The app collects these
+     * batches and runs inference on each one.
      */
     private fun startInferenceStream() {
-        if (sensorSource == null) {
-            Toast.makeText(this, "No sensor source connected", Toast.LENGTH_SHORT).show()
+        if (bleSensorSource == null || bleService == null || !bleService!!.isConnected()) {
+            Toast.makeText(this, "Not connected to glove", Toast.LENGTH_SHORT).show()
             return
         }
         
+        // Send stream command to glove (ASL_BLE_FINAL uses "stream" command)
+        // The glove will automatically send batches of 75 samples with 1-second gaps
+        if (!bleService!!.writeCommand("stream")) {
+            Toast.makeText(this, "Failed to start stream on glove", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        isStreaming = true
+        bleSensorSource?.setActive(true)
+        sequenceBuffer.clear()
+        
+        updateConnectionStatus("Streaming...")
+        
         inferenceJob = lifecycleScope.launch(Dispatchers.IO) {
-            var lastPrediction = ""
-            var stableCount = 0
-            val STABILITY_THRESHOLD = 3  // Require 3 consecutive same predictions
+            val REQUIRED_READINGS = 75 // Glove sends exactly 75 samples per batch
             
-            while (isActive && isConnected) {
+            while (isActive && isStreaming) {
                 try {
-                    // Get next sensor reading from glove
-                    var features = sensorSource?.nextFeatures()
+                    // Collect exactly 75 readings
+                    val readings = mutableListOf<FloatArray>()
+                    var readingsReceived = 0
                     
-                    if (features == null) {
-                        android.util.Log.w("Inference", "No features received, checking connection...")
-                        withContext(Dispatchers.Main) {
-                            updateConnectionStatus("Connection lost")
-                            stopInferenceStream()
-                        }
-                        break
-                    }
-                    
-                    // Apply calibration if available
-                    if (calibrationData != null) {
-                        features = calibrationData!!.normalizeAllSensors(features)
-                    }
-                    
-                    // Add to buffer
-                    sequenceBuffer.add(features)
-                    
-                    // Only predict when buffer has enough data (at least 50% full)
-                    if (sequenceBuffer.size() >= fusionClassifier.getSequenceLength() / 2) {
-                        // Get sequence from buffer
-                        val sequence = sequenceBuffer.getSequence()
+                    while (readingsReceived < REQUIRED_READINGS && isActive && isStreaming) {
+                        // Get next sensor reading from BLE
+                        var features = bleSensorSource?.nextFeatures()
                         
-                        // Run fusion prediction
-                        val pred = fusionClassifier.predict(sequence)
-                        if (pred == null) {
-                            android.util.Log.w("Inference", "Prediction returned null, skipping")
+                        // Wait a bit if no data available yet
+                        if (features == null) {
+                            delay(50) // Small delay to avoid busy waiting
                             continue
                         }
                         
-                        android.util.Log.d("Inference", 
-                            "Buffer: ${sequenceBuffer.size()}/${fusionClassifier.getSequenceLength()}, " +
-                            "Prediction: ${pred.label} (${(pred.probability * 100).toInt()}%)"
-                        )
+                        // Apply calibration if available
+                        if (calibrationData != null) {
+                            features = calibrationData!!.normalizeAllSensors(features)
+                        }
                         
-                        // Update status with current prediction
+                        readings.add(features)
+                        readingsReceived++
+                        
+                        // Update status to show progress
                         withContext(Dispatchers.Main) {
-                            updateConnectionStatus("Connected - ${pred.label} (${(pred.probability * 100).toInt()}%)")
-                        }
-                        
-                        // Stability check: only add prediction if it's stable
-                        if (pred.label == lastPrediction) {
-                            stableCount++
-                        } else {
-                            lastPrediction = pred.label
-                            stableCount = 1
-                        }
-                        
-                        // Add to input if prediction is stable and confident
-                        if (stableCount >= STABILITY_THRESHOLD && 
-                            pred.probability >= 0.5f &&
-                            pred.label != "Neutral") {  // Don't add neutral gestures
-                            
-                            withContext(Dispatchers.Main) {
-                                inputEdit.append(pred.label)
-                                
-                                // Speak the prediction if TTS is enabled
-                                if (ttsEnabled) {
-                                    tts.speak(pred.label, TextToSpeech.QUEUE_FLUSH, null, null)
-                                }
-                            }
-                            
-                            // Reset for next gesture
-                            stableCount = 0
-                            lastPrediction = ""
-                            sequenceBuffer.clear()  // Clear buffer for next gesture
-                            
-                            // Small delay to avoid rapid repeated predictions
-                            kotlinx.coroutines.delay(500L)
+                            updateConnectionStatus("Collecting data: $readingsReceived/$REQUIRED_READINGS")
                         }
                     }
                     
+                    if (readingsReceived < REQUIRED_READINGS) {
+                        // Stream was stopped or connection lost
+                        break
+                    }
+                    
+                    // Note: Glove handles the 1-second gap between batches automatically,
+                    // so we can process immediately after collecting 75 readings
+                    withContext(Dispatchers.Main) {
+                        updateConnectionStatus("Processing...")
+                    }
+                    
+                    // Convert readings to sequence format
+                    val sequence = readings.toTypedArray()
+                    
+                    // Run fusion prediction
+                    val pred = fusionClassifier.predict(sequence)
+                    if (pred == null) {
+                        android.util.Log.w("Inference", "Prediction returned null, skipping")
+                        withContext(Dispatchers.Main) {
+                            updateConnectionStatus("Prediction failed")
+                        }
+                        continue
+                    }
+                    
+                    android.util.Log.d("Inference", 
+                        "Prediction: ${pred.label} (${(pred.probability * 100).toInt()}%)"
+                    )
+                    
+                    // Update status with current prediction
+                    withContext(Dispatchers.Main) {
+                        updateConnectionStatus("${pred.label} (${(pred.probability * 100).toInt()}%)")
+                    }
+                    
+                    // Add predicted letter to text box (if confident enough)
+                    if (pred.probability >= 0.5f && pred.label != "Neutral") {
+                        withContext(Dispatchers.Main) {
+                            inputEdit.append(pred.label)
+                            
+                            // Speak the prediction if TTS is enabled
+                            if (ttsEnabled) {
+                                tts.speak(pred.label, TextToSpeech.QUEUE_FLUSH, null, null)
+                            }
+                        }
+                    }
+                    
+                    // Clear buffer for next cycle
+                    sequenceBuffer.clear()
+                    
+                    // Cycle repeats automatically
+                    
                 } catch (e: Exception) {
                     android.util.Log.e("Inference", "Error in inference loop", e)
+                    withContext(Dispatchers.Main) {
+                        updateConnectionStatus("Error: ${e.message}")
+                    }
+                    delay(1000) // Wait before retrying
                 }
             }
         }
@@ -304,10 +390,23 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
      * Stop the inference stream.
      */
     private fun stopInferenceStream() {
+        isStreaming = false
         inferenceJob?.cancel()
         inferenceJob = null
-        isConnected = false
+        bleSensorSource?.setActive(false)
         sequenceBuffer.clear()
+        
+        // Send stream:off command to glove
+        bleService?.writeCommand("stream:off")
+        
+        runOnUiThread {
+            if (bleService?.isConnected() == true) {
+                updateConnectionStatus("Connected (stream stopped)")
+            } else {
+                updateConnectionStatus("Disconnected")
+            }
+            updateStreamButtons()
+        }
     }
 
     override fun onDestroy() {
@@ -317,8 +416,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         // Close sensor source
         lifecycleScope.launch {
             sensorSource?.close()
+            bleSensorSource?.close()
         }
         sensorSource = null
+        bleSensorSource = null
+        
+        // Disconnect BLE service
+        bleService?.disconnect()
+        bleService = null
 
         // Shutdown TTS
         tts.stop()
@@ -382,10 +487,34 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         // This will be called when returning from BluetoothActivity with a connection
-        // The BluetoothActivity will pass back connection details when ready
         if (requestCode == BLUETOOTH_CONNECT_REQUEST && resultCode == RESULT_OK) {
-            // Connection established - will be handled via shared preferences or intent extras
-            updateConnectionStatus("Connected to glove")
+            // Connection details are stored in shared preferences by BluetoothActivity
+            val prefs = getSharedPreferences("BluetoothConnection", Context.MODE_PRIVATE)
+            val deviceAddress = prefs.getString("device_address", null)
+            val isBLE = prefs.getBoolean("is_ble", false)
+            
+            if (deviceAddress != null && isBLE && bleService != null) {
+                // Connect to the BLE device
+                val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+                val adapter = bluetoothManager.adapter
+                
+                try {
+                    val device = adapter.getRemoteDevice(deviceAddress)
+                    if (bleService!!.connect(device)) {
+                        updateConnectionStatus("Connecting...")
+                        updateStreamButtons()
+                    } else {
+                        Toast.makeText(this, "Failed to initiate connection", Toast.LENGTH_SHORT).show()
+                        updateConnectionStatus("Connection failed")
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("MainActivity", "Failed to connect to device", e)
+                    Toast.makeText(this, "Failed to connect: ${e.message}", Toast.LENGTH_SHORT).show()
+                    updateConnectionStatus("Connection failed")
+                }
+            } else {
+                updateConnectionStatus("Connected to glove")
+            }
         }
     }
 }

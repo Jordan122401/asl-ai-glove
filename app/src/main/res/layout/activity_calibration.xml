@@ -234,6 +234,14 @@
             android:layout_marginBottom="8dp"/>
 
         <Button
+            android:id="@+id/viewLogButton"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="View Command Log"
+            android:textSize="14sp"
+            android:layout_marginBottom="8dp"/>
+
+        <Button
             android:id="@+id/skipButton"
             android:layout_width="match_parent"
             android:layout_height="48dp"
