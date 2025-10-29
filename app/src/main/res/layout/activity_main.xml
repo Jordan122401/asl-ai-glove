@@ -85,12 +85,12 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:backgroundTint="?attr/colorOnSurface"
-            android:hint="@string/app_name"
+            android:hint="Sign/Type text here..."
             android:inputType="textMultiLine"
             android:minHeight="48dp"
             android:minLines="3"
             android:textColor="?attr/colorOnSurface"
-            android:textColorHint="?attr/colorOnSurface" />
+            android:textColorHint="@color/white" />
     </LinearLayout>
 
     <!-- Container 3: Connected text display -->
