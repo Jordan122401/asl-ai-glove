@@ -67,7 +67,8 @@ class BLEService(private val context: Context) {
         try {
             val data = "$command\n".toByteArray() // Add newline for command termination
             characteristic.value = data
-            characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+            // Use default write type for broader compatibility across devices
+            characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
             
             val success = gatt.writeCharacteristic(characteristic)
             Log.d(TAG, "Writing command: $command (${data.size} bytes) - Success: $success")
@@ -148,6 +149,13 @@ class BLEService(private val context: Context) {
                         descriptor?.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
                         gatt.writeDescriptor(descriptor)
                         Log.d(TAG, "Enabled notifications for TX characteristic")
+                        // Request higher MTU to reduce fragmentation
+                        try {
+                            gatt.requestMtu(185)
+                            Log.d(TAG, "Requested MTU 185")
+                        } catch (e: Exception) {
+                            Log.w(TAG, "MTU request failed: ${e.message}")
+                        }
                     } else {
                         Log.e(TAG, "TX characteristic not found!")
                     }

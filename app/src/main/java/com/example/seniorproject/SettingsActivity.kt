@@ -155,16 +155,10 @@ class SettingsActivity : AppCompatActivity() {
         // Display current user
         updateCurrentUserDisplay()
         
-        // Recalibrate button
+        // Recalibrate button (now navigates to Command Log)
         recalibrateButton.setOnClickListener {
-            val currentUser = userManager.getCurrentUser()
-            if (currentUser != null) {
-                val intent = Intent(this, CalibrationActivity::class.java)
-                intent.putExtra("username", currentUser.username)
-                startActivity(intent)
-            } else {
-                Toast.makeText(this, "No user selected", Toast.LENGTH_SHORT).show()
-            }
+            val intent = Intent(this, BLELogActivity::class.java)
+            startActivity(intent)
         }
         
         // Switch user button
@@ -183,8 +177,7 @@ class SettingsActivity : AppCompatActivity() {
     private fun updateCurrentUserDisplay() {
         val currentUser = userManager.getCurrentUser()
         if (currentUser != null) {
-            val calibrationStatus = if (currentUser.isCalibrated) "✓ Calibrated" else "✗ Not Calibrated"
-            currentUserDisplay.text = "Current User: ${currentUser.username} ($calibrationStatus)"
+            currentUserDisplay.text = "Current User: ${currentUser.username}"
         } else {
             currentUserDisplay.text = "Current User: None"
         }

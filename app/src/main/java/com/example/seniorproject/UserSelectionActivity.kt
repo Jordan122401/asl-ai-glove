@@ -16,6 +16,12 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.seniorproject.data.User
 import com.example.seniorproject.data.UserManager
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class UserSelectionActivity : AppCompatActivity() {
 
@@ -26,6 +32,10 @@ class UserSelectionActivity : AppCompatActivity() {
     
     private lateinit var userManager: UserManager
     private lateinit var userAdapter: UserAdapter
+    private var bleService: BLEService? = null
+    
+    // Pre-populated users
+    private val PRE_POPULATED_USERS = listOf("Jordan", "Madison", "Davaney", "Raul", "Marc")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Apply theme before calling super
@@ -41,25 +51,32 @@ class UserSelectionActivity : AppCompatActivity() {
 
         // Initialize UserManager
         userManager = UserManager(this)
+        
+        // Initialize pre-populated users if they don't exist
+        initializePrePopulatedUsers()
 
         // Initialize views
         userRecyclerView = findViewById(R.id.userRecyclerView)
         usernameInput = findViewById(R.id.usernameInput)
         createUserButton = findViewById(R.id.createUserButton)
         emptyUsersText = findViewById(R.id.emptyUsersText)
+        
+        // Hide the create user section since we're using pre-populated users
+        findViewById<View>(R.id.newUserContainer).visibility = View.GONE
 
         // Setup RecyclerView
         userAdapter = UserAdapter(
             users = mutableListOf(),
             onUserClick = { user -> onUserSelected(user) },
-            onDeleteClick = { user -> onDeleteUser(user) }
+            onDeleteClick = { user -> onDeleteUser(user) },
+            showDeleteButton = false // Hide delete button for pre-populated users
         )
         userRecyclerView.layoutManager = LinearLayoutManager(this)
         userRecyclerView.adapter = userAdapter
-
-        // Create user button
-        createUserButton.setOnClickListener {
-            createNewUser()
+        
+        // Connect to BLE service to send setuser command
+        lifecycleScope.launch(Dispatchers.IO) {
+            connectToBleService()
         }
 
         // Load and display users
@@ -89,34 +106,16 @@ class UserSelectionActivity : AppCompatActivity() {
     private fun onUserSelected(user: User) {
         userManager.setCurrentUser(user)
         
-        if (user.isCalibrated) {
-            // User has calibration, go to MainActivity
-            Toast.makeText(this, "Welcome back, ${user.username}!", Toast.LENGTH_SHORT).show()
-            navigateToMainActivity()
-        } else {
-            // User needs to calibrate
-            showCalibrationPrompt(user)
+        // Send setuser command to the glove via BLE
+        lifecycleScope.launch(Dispatchers.IO) {
+            sendSetUserCommand(user.username)
         }
+        
+        // All users are pre-calibrated on the ESP32, so go directly to MainActivity
+        Toast.makeText(this, "Welcome, ${user.username}!", Toast.LENGTH_SHORT).show()
+        navigateToMainActivity()
     }
 
-    /**
-     * Show a dialog prompting the user to calibrate.
-     */
-    private fun showCalibrationPrompt(user: User) {
-        AlertDialog.Builder(this)
-            .setTitle("Calibration Required")
-            .setMessage("${user.username} hasn't calibrated yet. Would you like to calibrate now?")
-            .setPositiveButton("Calibrate") { _, _ ->
-                navigateToCalibration(user)
-            }
-            .setNegativeButton("Skip") { _, _ ->
-                // Allow user to skip calibration and go to main activity
-                Toast.makeText(this, "You can calibrate later from Settings", Toast.LENGTH_LONG).show()
-                navigateToMainActivity()
-            }
-            .setCancelable(false)
-            .show()
-    }
 
     /**
      * Handle user deletion.
@@ -138,44 +137,87 @@ class UserSelectionActivity : AppCompatActivity() {
     }
 
     /**
-     * Create a new user.
+     * Initialize pre-populated users if they don't exist.
+     * Also removes old "User1-5" users if they exist.
      */
-    private fun createNewUser() {
-        val username = usernameInput.text.toString().trim()
-        
-        if (username.isEmpty()) {
-            Toast.makeText(this, "Please enter a username", Toast.LENGTH_SHORT).show()
-            return
-        }
-        
-        if (username.length < 2) {
-            Toast.makeText(this, "Username must be at least 2 characters", Toast.LENGTH_SHORT).show()
-            return
-        }
-        
-        if (userManager.createUser(username)) {
-            Toast.makeText(this, "User '$username' created!", Toast.LENGTH_SHORT).show()
-            usernameInput.text.clear()
-            refreshUserList()
-            
-            // Automatically select the new user
-            val newUser = userManager.getUser(username)
-            if (newUser != null) {
-                onUserSelected(newUser)
+    private fun initializePrePopulatedUsers() {
+        // Remove old "User1-5" users if they exist
+        for (i in 1..5) {
+            val oldUsername = "User$i"
+            if (userManager.userExists(oldUsername)) {
+                userManager.deleteUser(oldUsername)
             }
+        }
+        
+        // Create new pre-populated users if they don't exist
+        for (username in PRE_POPULATED_USERS) {
+            if (!userManager.userExists(username)) {
+                userManager.createUser(username)
+            }
+        }
+    }
+    
+    /**
+     * Connect to BLE service to send commands to the glove.
+     */
+    private suspend fun connectToBleService() {
+        try {
+            val prefs = getSharedPreferences("BluetoothConnection", Context.MODE_PRIVATE)
+            val deviceAddress = prefs.getString("device_address", null)
+            val isBLE = prefs.getBoolean("is_ble", false)
+            
+            if (isBLE && deviceAddress != null) {
+                val bluetoothManager = withContext(Dispatchers.Main) {
+                    getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+                }
+                val adapter = bluetoothManager.adapter
+                val device = adapter.getRemoteDevice(deviceAddress)
+                
+                bleService = BLEService(this@UserSelectionActivity).apply {
+                    onConnectionStateChange = { connected ->
+                        android.util.Log.d("UserSelection", "BLE connection state: $connected")
+                    }
+                    
+                    onDataReceived = { data ->
+                        android.util.Log.d("UserSelection", "BLE data received: $data")
+                    }
+                    
+                    connect(device)
+                }
+                android.util.Log.d("UserSelection", "BLE service initialized")
+            } else {
+                android.util.Log.d("UserSelection", "No BLE device available")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("UserSelection", "Failed to connect to BLE service", e)
+        }
+    }
+    
+    /**
+     * Send setuser command to the glove.
+     * Format: setuser "name" (without quotes in the actual command)
+     */
+    private suspend fun sendSetUserCommand(username: String) {
+        val service = bleService
+        if (service != null && service.isConnected()) {
+            // Send command as: setuser Jordan (not setuser "Jordan")
+            val success = service.writeCommand("setuser $username")
+            withContext(Dispatchers.Main) {
+                if (success) {
+                    Toast.makeText(this@UserSelectionActivity, "Set user to $username on glove", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this@UserSelectionActivity, "Failed to set user on glove", Toast.LENGTH_SHORT).show()
+                }
+            }
+            android.util.Log.d("UserSelection", "Sent setuser $username command - Success: $success")
         } else {
-            Toast.makeText(this, "User '$username' already exists", Toast.LENGTH_SHORT).show()
+            android.util.Log.d("UserSelection", "BLE not connected - cannot send setuser command")
+            withContext(Dispatchers.Main) {
+                Toast.makeText(this@UserSelectionActivity, "Glove not connected - Set user on glove manually", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
-    /**
-     * Navigate to calibration activity.
-     */
-    private fun navigateToCalibration(user: User) {
-        val intent = Intent(this, CalibrationActivity::class.java)
-        intent.putExtra("username", user.username)
-        startActivityForResult(intent, REQUEST_CODE_CALIBRATION)
-    }
 
     /**
      * Navigate to main activity.
@@ -186,18 +228,11 @@ class UserSelectionActivity : AppCompatActivity() {
         finish()
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        
-        if (requestCode == REQUEST_CODE_CALIBRATION && resultCode == RESULT_OK) {
-            // Calibration completed, refresh list and go to main activity
-            refreshUserList()
-            navigateToMainActivity()
-        }
-    }
-
-    companion object {
-        private const val REQUEST_CODE_CALIBRATION = 1001
+    override fun onDestroy() {
+        super.onDestroy()
+        // Cleanup BLE service
+        bleService?.disconnect()
+        bleService = null
     }
 }
 
@@ -207,7 +242,8 @@ class UserSelectionActivity : AppCompatActivity() {
 class UserAdapter(
     private var users: MutableList<User>,
     private val onUserClick: (User) -> Unit,
-    private val onDeleteClick: (User) -> Unit
+    private val onDeleteClick: (User) -> Unit,
+    private val showDeleteButton: Boolean = true
 ) : RecyclerView.Adapter<UserAdapter.UserViewHolder>() {
 
     inner class UserViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -218,14 +254,16 @@ class UserAdapter(
         fun bind(user: User) {
             usernameText.text = user.username
             
+            // Only show calibration status if user is calibrated
             if (user.isCalibrated) {
                 calibrationStatusText.text = "✓ Calibrated"
                 calibrationStatusText.visibility = View.VISIBLE
             } else {
-                calibrationStatusText.text = "Not calibrated"
-                calibrationStatusText.visibility = View.VISIBLE
-                calibrationStatusText.alpha = 0.5f
+                calibrationStatusText.visibility = View.GONE
             }
+
+            // Show/hide delete button based on flag
+            deleteButton.visibility = if (showDeleteButton) View.VISIBLE else View.GONE
 
             itemView.setOnClickListener {
                 onUserClick(user)

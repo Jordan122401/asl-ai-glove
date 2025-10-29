@@ -28,6 +28,7 @@ class BLESensorSource : SensorSource {
     }
     
     private val dataQueue = ConcurrentLinkedQueue<FloatArray>()
+    private val lineBuffer = StringBuilder()
     @Volatile
     private var isActive = false
     
@@ -37,12 +38,23 @@ class BLESensorSource : SensorSource {
      */
     fun onDataReceived(data: String) {
         if (!isActive) return
-        
-        // Split by newlines in case multiple lines came in one packet
-        val lines = data.split("\n", "\r\n", "\r")
-        
-        for (line in lines) {
-            val trimmed = line.trim()
+
+        // Accumulate into buffer and process complete lines only
+        synchronized(lineBuffer) {
+            lineBuffer.append(data)
+            // Normalize CRLF to LF to simplify splitting
+            val normalized = lineBuffer.toString().replace("\r\n", "\n").replace("\r", "\n")
+            val parts = normalized.split("\n")
+            // Keep the last part in the buffer if it's not a complete line
+            lineBuffer.setLength(0)
+            val last = parts.last()
+            if (last.isNotEmpty()) {
+                lineBuffer.append(last)
+            }
+
+            // Process all complete lines (all except last)
+            for (i in 0 until parts.size - 1) {
+                val trimmed = parts[i].trim()
             
             // Skip empty lines, comments, or non-data lines
             if (trimmed.isEmpty() || trimmed.startsWith("#") || trimmed.startsWith("$")) {
@@ -54,39 +66,38 @@ class BLESensorSource : SensorSource {
                 Log.d(TAG, "Skipping CSV header line: $trimmed")
                 continue
             }
-            
-            // Parse CSV line
-            val parts = trimmed.split(",").map { it.trim() }
+                // Parse CSV line
+                val tokens = trimmed.split(",").map { it.trim() }
             
             // Handle both formats: with time (11 values) or without (10 values)
             // If 11 values, first is time - skip it. If 10, use all.
-            val startIndex = if (parts.size == NUM_FEATURES + 1) {
+                val startIndex = if (tokens.size == NUM_FEATURES + 1) {
                 1 // Skip time value
-            } else if (parts.size == NUM_FEATURES) {
+                } else if (tokens.size == NUM_FEATURES) {
                 0 // Use all values
-            } else {
-                Log.w(TAG, "Unexpected data format: expected $NUM_FEATURES or ${NUM_FEATURES + 1} values, got ${parts.size}: $trimmed")
+                } else {
+                    Log.w(TAG, "Unexpected data format: expected $NUM_FEATURES or ${NUM_FEATURES + 1} values, got ${tokens.size}: $trimmed")
                 continue
-            }
+                }
             
             try {
                 val features = FloatArray(NUM_FEATURES)
                 var parseError = false
-                for (i in 0 until NUM_FEATURES) {
-                    val partIndex = startIndex + i
-                    val value = parts[partIndex].toFloatOrNull()
+                for (iFeature in 0 until NUM_FEATURES) {
+                    val partIndex = startIndex + iFeature
+                    val value = tokens[partIndex].toFloatOrNull()
                     if (value == null) {
                         // If first parsing fails, might be header - check if it's text
-                        if (!parts[partIndex].matches(Regex("-?\\d+(\\.\\d+)?([eE][+-]?\\d+)?"))) {
+                        if (!tokens[partIndex].matches(Regex("-?\\d+(\\.\\d+)?([eE][+-]?\\d+)?"))) {
                             Log.d(TAG, "Skipping non-numeric line (likely header): $trimmed")
                             parseError = true
                             break
                         }
-                        Log.w(TAG, "Failed to parse value at index $partIndex: ${parts.getOrNull(partIndex)}")
+                        Log.w(TAG, "Failed to parse value at index $partIndex: ${tokens.getOrNull(partIndex)}")
                         parseError = true
                         break
                     }
-                    features[i] = value
+                    features[iFeature] = value
                 }
                 
                 if (parseError) continue
@@ -94,9 +105,9 @@ class BLESensorSource : SensorSource {
                 // Add to queue for processing
                 dataQueue.offer(features)
                 Log.d(TAG, "Parsed and queued sensor data: ${features.joinToString { "%.2f".format(it) }}")
-                
             } catch (e: Exception) {
                 Log.e(TAG, "Error parsing sensor data line: $trimmed", e)
+            }
             }
         }
     }

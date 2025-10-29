@@ -71,6 +71,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private val BLUETOOTH_PERMISSION_REQUEST = 1001
 
     private var inferenceJob: Job? = null
+    private var statusJob: Job? = null
     private var isStreaming = false // Track if streaming is active
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -201,7 +202,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         calibrationData = currentUser?.calibrationData
         
         if (currentUser != null) {
-            android.util.Log.d("MainActivity", "Loaded user: ${currentUser?.username}, Calibrated: ${currentUser?.isCalibrated}")
+            android.util.Log.d("MainActivity", "Loaded user: ${currentUser?.username}")
             if (calibrationData != null) {
                 android.util.Log.d("MainActivity", "Calibration data loaded for ${currentUser?.username}")
             }
@@ -219,8 +220,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
      */
     private fun updateUserDisplay() {
         currentUser?.let { user ->
-            val calibrationStatus = if (user.isCalibrated) "✓" else "✗"
-            val statusMessage = "User: ${user.username} $calibrationStatus"
+            val statusMessage = "User: ${user.username}"
             currentUserText.text = statusMessage
             android.util.Log.d("MainActivity", statusMessage)
         }
@@ -291,6 +291,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         sequenceBuffer.clear()
         
         updateConnectionStatus("Streaming...")
+        // Start a lightweight status monitor so users see progress even if parsing is delayed
+        statusJob?.cancel()
+        statusJob = lifecycleScope.launch(Dispatchers.Main) {
+            while (isActive && isStreaming) {
+                val queued = try { bleSensorSource?.queueSize() ?: 0 } catch (_: Exception) { 0 }
+                connectionStatusText.text = "Streaming... (queued: $queued)"
+                delay(500)
+            }
+        }
         
         inferenceJob = lifecycleScope.launch(Dispatchers.IO) {
             val REQUIRED_READINGS = 75 // Glove sends exactly 75 samples per batch
@@ -358,12 +367,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         updateConnectionStatus("${pred.label} (${(pred.probability * 100).toInt()}%)")
                     }
                     
-                    // Add predicted letter to text box (if confident enough)
-                    if (pred.probability >= 0.5f && pred.label != "Neutral") {
-                        withContext(Dispatchers.Main) {
+                    // Append to text box for each 75-sample batch
+                    withContext(Dispatchers.Main) {
+                        if (pred.label == "Neutral") {
+                            inputEdit.append(" ")
+                        } else {
                             inputEdit.append(pred.label)
-                            
-                            // Speak the prediction if TTS is enabled
                             if (ttsEnabled) {
                                 tts.speak(pred.label, TextToSpeech.QUEUE_FLUSH, null, null)
                             }
@@ -393,6 +402,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         isStreaming = false
         inferenceJob?.cancel()
         inferenceJob = null
+        statusJob?.cancel()
+        statusJob = null
         bleSensorSource?.setActive(false)
         sequenceBuffer.clear()
         

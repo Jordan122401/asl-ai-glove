@@ -29,14 +29,10 @@
             android:label="@string/title_activity_settings"
             android:theme="@style/Theme.SeniorProject.Light" />
         <activity
-            android:name=".CalibrationActivity"
-            android:exported="false"
-            android:theme="@style/Theme.SeniorProject.Light" />
-        <activity
             android:name=".BLELogActivity"
             android:exported="false"
             android:theme="@style/Theme.SeniorProject.Light"
-            android:label="BLE Command Log" />
+            android:label="Command Log" />
         <activity
             android:name=".UserSelectionActivity"
             android:exported="true">
