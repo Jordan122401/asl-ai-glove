@@ -5,4 +5,6 @@
     <string name="tts_is_on">TTS is ON</string>
     <string name="tts_is_off">TTS is OFF</string>
     <string name="signcast_logo">SignCast Logo</string>
+    <string name="connect_to_glove">Connect to Glove</string>
+    <string name="users">Users</string>
 </resources>

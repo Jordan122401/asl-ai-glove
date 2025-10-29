@@ -247,31 +247,11 @@ class UserAdapter(
 ) : RecyclerView.Adapter<UserAdapter.UserViewHolder>() {
 
     inner class UserViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        val usernameText: TextView = itemView.findViewById(R.id.usernameText)
-        val calibrationStatusText: TextView = itemView.findViewById(R.id.calibrationStatusText)
-        val deleteButton: Button = itemView.findViewById(R.id.deleteUserButton)
+        private val usernameButton: Button = itemView.findViewById(R.id.usernameButton)
 
         fun bind(user: User) {
-            usernameText.text = user.username
-            
-            // Only show calibration status if user is calibrated
-            if (user.isCalibrated) {
-                calibrationStatusText.text = "✓ Calibrated"
-                calibrationStatusText.visibility = View.VISIBLE
-            } else {
-                calibrationStatusText.visibility = View.GONE
-            }
-
-            // Show/hide delete button based on flag
-            deleteButton.visibility = if (showDeleteButton) View.VISIBLE else View.GONE
-
-            itemView.setOnClickListener {
-                onUserClick(user)
-            }
-
-            deleteButton.setOnClickListener {
-                onDeleteClick(user)
-            }
+            usernameButton.text = user.username
+            usernameButton.setOnClickListener { onUserClick(user) }
         }
     }
 

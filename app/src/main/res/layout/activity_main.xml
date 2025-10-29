@@ -140,6 +140,15 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintBottom_toBottomOf="parent">
 
+        <!-- Stream Toggle at top -->
+        <Button
+            android:id="@+id/streamToggleButton"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="Start Stream"
+            android:layout_marginBottom="8dp"
+            android:enabled="false"/>
+
         <!-- Row 1: Connect Text and Clear Text buttons side by side -->
         <LinearLayout
             android:layout_width="match_parent"
@@ -170,39 +179,8 @@
             android:layout_height="48dp"
             android:text="Settings"
             android:layout_marginBottom="8dp" />
-
-        <Button
-            android:id="@+id/checkBluetoothButton"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:text="Connect to Glove"
-            android:layout_marginBottom="8dp" />
-            
-        <!-- Row: Start/Stop Stream buttons side by side -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="8dp">
-            
-            <Button
-                android:id="@+id/startStreamButton"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:text="Start Stream"
-                android:layout_marginEnd="4dp"
-                android:enabled="false"/>
-            
-            <Button
-                android:id="@+id/stopStreamButton"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:text="Stop Stream"
-                android:layout_marginStart="4dp"
-                android:enabled="false"/>
-        </LinearLayout>
+        
+        <!-- Removed old Start/Stop Stream row -->
             
         <!-- Connection Status Display -->
         <TextView

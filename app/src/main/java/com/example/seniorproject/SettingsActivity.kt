@@ -27,6 +27,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var currentUserDisplay: TextView
     private lateinit var recalibrateButton: Button
     private lateinit var switchUserButton: Button
+    private lateinit var connectGloveButton: Button
     private lateinit var userManager: UserManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -52,6 +53,7 @@ class SettingsActivity : AppCompatActivity() {
         currentUserDisplay = findViewById(R.id.currentUserDisplay)
         recalibrateButton = findViewById(R.id.recalibrateButton)
         switchUserButton = findViewById(R.id.switchUserButton)
+        connectGloveButton = findViewById(R.id.connectGloveButton)
 
         // Theme
         val themes = arrayOf("Light", "Dark")
@@ -168,6 +170,11 @@ class SettingsActivity : AppCompatActivity() {
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
             finishAffinity()
+        }
+
+        // Connect to Glove from Settings
+        connectGloveButton.setOnClickListener {
+            startActivity(Intent(this, BluetoothActivity::class.java))
         }
     }
     

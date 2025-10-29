@@ -45,10 +45,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var textViewResult: TextView
     private lateinit var buttonConnect: Button
     private lateinit var buttonSettings: Button
-    private lateinit var bluetoothButton: Button
     private lateinit var clearTextButton: Button
-    private lateinit var startStreamButton: Button
-    private lateinit var stopStreamButton: Button
+    private lateinit var streamToggleButton: Button
     private lateinit var connectionStatusText: TextView
     private lateinit var currentUserText: TextView
     private lateinit var tts: TextToSpeech
@@ -100,10 +98,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         textViewResult = findViewById(R.id.connectedText)
         buttonConnect = findViewById(R.id.connectButton)
         buttonSettings = findViewById(R.id.settingsButton)
-        bluetoothButton = findViewById(R.id.checkBluetoothButton)
         clearTextButton = findViewById(R.id.clearTextButton)
-        startStreamButton = findViewById(R.id.startStreamButton)
-        stopStreamButton = findViewById(R.id.stopStreamButton)
+        streamToggleButton = findViewById(R.id.streamToggleButton)
         connectionStatusText = findViewById(R.id.connectionStatusText)
         currentUserText = findViewById(R.id.currentUserText)
 
@@ -128,26 +124,20 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             startActivity(intent)
         }
 
-        // Bluetooth button - Connect to glove
-        bluetoothButton.setOnClickListener {
-            checkBluetoothPermissionAndConnect()
-        }
-
+        
         // Clear Text button
         clearTextButton.setOnClickListener {
             editTextInput.text.clear()
             textViewResult.text = ""
         }
         
-        // Start Stream button
-        startStreamButton.setOnClickListener {
-            startInferenceStream()
-            updateStreamButtons()
-        }
-        
-        // Stop Stream button
-        stopStreamButton.setOnClickListener {
-            stopInferenceStream()
+        // Stream toggle button
+        streamToggleButton.setOnClickListener {
+            if (isStreaming) {
+                stopInferenceStream()
+            } else {
+                startInferenceStream()
+            }
             updateStreamButtons()
         }
         
@@ -166,8 +156,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
      */
     private fun updateStreamButtons() {
         val isConnected = bleService?.isConnected() == true
-        startStreamButton.isEnabled = isConnected && !isStreaming
-        stopStreamButton.isEnabled = isConnected && isStreaming
+        streamToggleButton.isEnabled = isConnected
+        streamToggleButton.text = if (isStreaming) "Stop Stream" else "Start Stream"
     }
     
     /**
@@ -258,7 +248,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 numFeatures = fusionClassifier.getNumFeatures()
             )
             
-            Toast.makeText(this, "Fusion model loaded successfully", Toast.LENGTH_SHORT).show()
             
         } catch (e: Exception) {
             android.util.Log.e("MainActivity", "Failed to initialize fusion model", e)

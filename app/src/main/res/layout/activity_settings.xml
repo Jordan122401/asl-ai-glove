@@ -195,13 +195,27 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Command Log"
-            android:layout_marginBottom="8dp"/>
+            android:layout_marginBottom="8dp"
+            android:backgroundTint="@color/white"
+            android:textColor="@color/dark_blue"/>
 
         <Button
             android:id="@+id/switchUserButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Switch User"/>
+            android:text="Switch User"
+            android:layout_marginBottom="8dp"
+            android:backgroundTint="@color/white"
+            android:textColor="@color/dark_blue" />
+
+        <Button
+            android:id="@+id/connectGloveButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Connect to Glove"
+            android:layout_marginBottom="8dp"
+            android:backgroundTint="@color/white"
+            android:textColor="@color/dark_blue"/>
     </LinearLayout>
 
     <!-- Save Button -->
