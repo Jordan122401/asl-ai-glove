@@ -134,7 +134,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         // Stream toggle button
         streamToggleButton.setOnClickListener {
             if (isStreaming) {
-                stopInferenceStream()
+                stopInferenceStream(true)
             } else {
                 startInferenceStream()
             }
@@ -172,7 +172,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         updateConnectionStatus("Connected to glove")
                     } else {
                         updateConnectionStatus("Disconnected")
-                        stopInferenceStream()
+                        stopInferenceStream(false)
                     }
                     updateStreamButtons()
                 }
@@ -181,6 +181,27 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 // Forward received data to sensor source for parsing
                 bleSensorSource?.onDataReceived(data)
             }
+        }
+
+        // Attempt auto-reconnect to previously selected BLE device
+        val prefs = getSharedPreferences("BluetoothConnection", Context.MODE_PRIVATE)
+        val deviceAddress = prefs.getString("device_address", null)
+        val isBLE = prefs.getBoolean("is_ble", false)
+        if (deviceAddress != null && isBLE && bleService != null) {
+            try {
+                val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+                val adapter = bluetoothManager.adapter
+                val device = adapter.getRemoteDevice(deviceAddress)
+                if (bleService!!.connect(device)) {
+                    updateConnectionStatus("Connecting...")
+                } else {
+                    updateConnectionStatus("Connection failed")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "Auto-reconnect failed", e)
+                updateConnectionStatus("Connection failed")
+            }
+            updateStreamButtons()
         }
     }
     
@@ -362,9 +383,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                             inputEdit.append(" ")
                         } else {
                             inputEdit.append(pred.label)
-                            if (ttsEnabled) {
-                                tts.speak(pred.label, TextToSpeech.QUEUE_FLUSH, null, null)
-                            }
                         }
                     }
                     
@@ -387,7 +405,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     /**
      * Stop the inference stream.
      */
-    private fun stopInferenceStream() {
+    private fun stopInferenceStream(userInitiated: Boolean = false) {
         isStreaming = false
         inferenceJob?.cancel()
         inferenceJob = null
@@ -406,12 +424,21 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 updateConnectionStatus("Disconnected")
             }
             updateStreamButtons()
+            if (userInitiated) {
+                val lines = editTextInput.text.toString().split("\n")
+                val connected = lines.joinToString(" ") { it.replace(" ", "") }
+                textViewResult.text = connected
+                textViewResult.textSize = fontSize.toFloat()
+                if (ttsEnabled && connected.isNotBlank()) {
+                    tts.speak(connected, TextToSpeech.QUEUE_FLUSH, null, null)
+                }
+            }
         }
     }
 
     override fun onDestroy() {
         // Stop inference stream
-        stopInferenceStream()
+        stopInferenceStream(false)
         
         // Close sensor source
         lifecycleScope.launch {
