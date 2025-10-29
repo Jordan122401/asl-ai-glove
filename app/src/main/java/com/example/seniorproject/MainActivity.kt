@@ -269,7 +269,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     /**
      * Start real-time inference stream from the connected BLE sensor source.
      * 
-     * With ASL_BLE_FINAL firmware, the glove automatically sends batches of exactly
+     * With ASL_BLE_FINAL_frfrfrfr firmware, the glove automatically sends batches of exactly
      * 75 samples with a 1-second gap between batches. The app collects these
      * batches and runs inference on each one.
      */
@@ -279,7 +279,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             return
         }
         
-        // Send stream command to glove (ASL_BLE_FINAL uses "stream" command)
+        // Send stream command to glove (ASL_BLE_FINAL_frfrfrfr uses "stream" command)
         // The glove will automatically send batches of 75 samples with 1-second gaps
         if (!bleService!!.writeCommand("stream")) {
             Toast.makeText(this, "Failed to start stream on glove", Toast.LENGTH_SHORT).show()

@@ -5,7 +5,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="?android:colorBackground"
+    android:background="@color/light_blue"
     android:padding="16dp"
     tools:context=".CalibrationActivity">
 
@@ -39,7 +39,17 @@
             android:text="User: Username"
             android:textColor="?attr/colorOnSurface"
             android:textSize="16sp"
-            android:alpha="0.7"/>
+            android:alpha="0.7"
+            android:layout_marginBottom="12dp"/>
+        
+        <!-- Connection Status -->
+        <TextView
+            android:id="@+id/connectionStatusText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Status: Not connected"
+            android:textColor="@android:color/holo_red_dark"
+            android:textSize="14sp"/>
     </LinearLayout>
 
 

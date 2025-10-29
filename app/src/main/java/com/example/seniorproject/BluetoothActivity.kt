@@ -57,7 +57,7 @@ class BluetoothActivity : AppCompatActivity() {
     // Standard UUID for Serial Port Profile (SPP) - Classic Bluetooth
     private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
     
-    // Nordic UART Service UUID for BLE (from ASL_BLE.ino)
+    // Nordic UART Service UUID for BLE (from ASL_BLE_FINAL_frfrfrfr.ino)
     private val NUS_SERVICE_UUID = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
     
     // For device discovery

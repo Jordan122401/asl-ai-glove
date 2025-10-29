@@ -6,9 +6,9 @@ import java.util.concurrent.ConcurrentLinkedQueue
 /**
  * BLE Sensor source that receives streaming data from the ASL glove via BLEService.
  * 
- * Compatible with ASL_BLE_FINAL firmware which sends windowed batches:
+ * Compatible with ASL_BLE_FINAL_frfrfrfr firmware which sends windowed batches:
  * - Exactly 75 samples per batch
- * - 1-second gap between batches
+ * - 1-second gap between batches (handled by firmware)
  * - Header line before each batch: "flex1,flex2,flex3,flex4,flex5,roll_deg,pitch_deg,ax_g,ay_g,az_g"
  * 
  * Expected data format from glove (CSV, 10 features per line, no time prefix):

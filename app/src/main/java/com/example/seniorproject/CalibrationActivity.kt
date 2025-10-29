@@ -23,9 +23,9 @@ import android.bluetooth.BluetoothManager
 
 /**
  * Activity for calibrating the glove sensors for a specific user.
- * Uses commands from ASL_BLE firmware to perform calibration on the glove itself.
+ * Uses commands from ASL_BLE_FINAL_frfrfrfr firmware to perform calibration on the glove itself.
  * 
- * Calibration commands from ASL_BLE.ino:
+ * Calibration commands from ASL_BLE_FINAL_frfrfrfr.ino:
  *   - "cal" - Calibrate flex sensors (rest + max bend for each finger)
  *   - "imu_cal" - Calibrate accelerometer (place flat and still)
  *   - "detail" - Show current calibration values (JSON format)
@@ -37,6 +37,7 @@ class CalibrationActivity : AppCompatActivity() {
     private lateinit var usernameText: TextView
     private lateinit var connectButton: Button
     private lateinit var skipButton: Button
+    private lateinit var connectionStatusText: TextView
     
     private lateinit var userManager: UserManager
     private var username: String = ""
@@ -70,6 +71,7 @@ class CalibrationActivity : AppCompatActivity() {
         usernameText = findViewById(R.id.usernameText)
         connectButton = findViewById(R.id.connectButton)
         skipButton = findViewById(R.id.skipButton)
+        connectionStatusText = findViewById(R.id.connectionStatusText)
         val beginCalibrationButton = findViewById<Button>(R.id.beginCalibrationButton)
 
         // Set username
@@ -88,6 +90,34 @@ class CalibrationActivity : AppCompatActivity() {
 
         skipButton.setOnClickListener {
             skipCalibration()
+        }
+        
+        // Check for existing BLE connection
+        lifecycleScope.launch(Dispatchers.IO) {
+            checkExistingConnection()
+        }
+        
+        // Check initial connection status and update display
+        updateConnectionStatus()
+    }
+    
+    /**
+     * Check if there's an existing BLE connection and connect to it.
+     */
+    private suspend fun checkExistingConnection() {
+        try {
+            val prefs = withContext(Dispatchers.Main) {
+                getSharedPreferences("BluetoothConnection", Context.MODE_PRIVATE)
+            }
+            val deviceAddress = prefs.getString("device_address", null)
+            val isBLE = prefs.getBoolean("is_ble", false)
+            
+            if (isBLE && deviceAddress != null) {
+                // Try to connect to existing BLE device
+                connectToBLEDevice(deviceAddress)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("Calibration", "Error checking existing connection", e)
         }
     }
 
@@ -117,9 +147,11 @@ class CalibrationActivity : AppCompatActivity() {
                     lifecycleScope.launch(Dispatchers.Main) {
                         if (connected) {
                             isConnected = true
+                            updateConnectionStatus()
                             Toast.makeText(this@CalibrationActivity, "BLE Connected!", Toast.LENGTH_SHORT).show()
                         } else {
                             isConnected = false
+                            updateConnectionStatus()
                         }
                     }
                 }
@@ -156,9 +188,32 @@ class CalibrationActivity : AppCompatActivity() {
             } else {
                 // Classic Bluetooth connection
                 isConnected = true
+                updateConnectionStatus()
                 Toast.makeText(this, "Connected! Ready to calibrate.", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+    
+    /**
+     * Update connection status display.
+     */
+    private fun updateConnectionStatus() {
+        // Check if BLE service is connected
+        val connected = bleService?.isConnected() == true || isConnected
+        
+        if (connected) {
+            connectionStatusText.text = "Status: Connected ✓"
+            connectionStatusText.setTextColor(getColor(android.R.color.holo_green_dark))
+        } else {
+            connectionStatusText.text = "Status: Not connected"
+            connectionStatusText.setTextColor(getColor(android.R.color.holo_red_dark))
+        }
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        // Update connection status when returning to this screen
+        updateConnectionStatus()
     }
 
     /**

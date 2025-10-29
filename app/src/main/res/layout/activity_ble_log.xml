@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="?android:colorBackground"
+    android:background="@color/light_blue"
     android:padding="16dp">
 
     <!-- Header -->
@@ -60,7 +60,8 @@
         android:orientation="horizontal"
         android:background="?attr/colorSurface"
         android:padding="8dp"
-        android:layout_marginBottom="8dp">
+        android:layout_marginBottom="8dp"
+        android:gravity="center_vertical">
 
         <Button
             android:id="@+id/calibrateFlexButton"
@@ -69,6 +70,7 @@
             android:layout_weight="1"
             android:text="Calibrate Flex Sensors"
             android:textSize="12sp"
+            android:gravity="center"
             android:layout_marginEnd="4dp"
             android:enabled="false"/>
 
@@ -79,6 +81,7 @@
             android:layout_weight="1"
             android:text="Calibrate IMU"
             android:textSize="12sp"
+            android:gravity="center"
             android:layout_marginStart="4dp"
             android:enabled="false"/>
     </LinearLayout>

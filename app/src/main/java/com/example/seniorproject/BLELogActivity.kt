@@ -9,8 +9,10 @@ import android.view.KeyEvent
 import android.view.inputmethod.EditorInfo
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.example.seniorproject.data.UserManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -37,6 +39,12 @@ class BLELogActivity : AppCompatActivity() {
     private val logEntries = mutableListOf<String>()
     private var maxLogEntries = 1000 // Keep last 1000 entries
     
+    // Track calibration completion
+    private var flexCalibrationSaved = false
+    private var imuCalibrationSaved = false
+    private var calibrationDialogShown = false
+    private lateinit var userManager: UserManager
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         // Apply theme
         val prefs = getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
@@ -48,6 +56,9 @@ class BLELogActivity : AppCompatActivity() {
         
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_ble_log)
+        
+        // Initialize user manager
+        userManager = UserManager(this)
         
         // Initialize views
         logText = findViewById(R.id.logText)
@@ -193,6 +204,8 @@ class BLELogActivity : AppCompatActivity() {
                     // Add received data to log
                     lifecycleScope.launch(Dispatchers.Main) {
                         addLogEntry(data)
+                        // Check for calibration save messages
+                        checkCalibrationCompletion(data)
                     }
                 }
                 
@@ -266,6 +279,56 @@ class BLELogActivity : AppCompatActivity() {
         } else {
             connectionStatusText.setTextColor(getColor(android.R.color.holo_red_dark))
         }
+    }
+    
+    /**
+     * Check incoming data for calibration save messages and detect when both are complete.
+     */
+    private fun checkCalibrationCompletion(data: String) {
+        val lowerData = data.lowercase()
+        
+        // Check for flex calibration saved
+        if (!flexCalibrationSaved && (lowerData.contains("saved flex calibration") || 
+                                       lowerData.contains("# saved flex calibration"))) {
+            flexCalibrationSaved = true
+            android.util.Log.d("BLELog", "Flex calibration saved detected")
+        }
+        
+        // Check for IMU calibration saved
+        if (!imuCalibrationSaved && (lowerData.contains("imu calibration saved") || 
+                                      lowerData.contains("# imu calibration saved"))) {
+            imuCalibrationSaved = true
+            android.util.Log.d("BLELog", "IMU calibration saved detected")
+        }
+        
+        // Show completion dialog when both are saved
+        if (flexCalibrationSaved && imuCalibrationSaved && !calibrationDialogShown) {
+            calibrationDialogShown = true
+            showCalibrationCompleteDialog()
+        }
+    }
+    
+    /**
+     * Show dialog when both calibrations are complete.
+     */
+    private fun showCalibrationCompleteDialog() {
+        val currentUser = userManager.getCurrentUser()
+        val username = currentUser?.username ?: "user"
+        
+        AlertDialog.Builder(this)
+            .setTitle("✅ Calibration Complete!")
+            .setMessage("Both flex sensor and IMU calibrations have been saved successfully.\n\n" +
+                    "Would you like to go to the main page now?")
+            .setPositiveButton("Go to Main Page") { _, _ ->
+                // Navigate to main activity
+                val intent = Intent(this, MainActivity::class.java)
+                intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
+                startActivity(intent)
+                finish()
+            }
+            .setNegativeButton("Stay Here", null)
+            .setCancelable(false)
+            .show()
     }
     
     override fun onDestroy() {
