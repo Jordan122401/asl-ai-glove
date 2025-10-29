@@ -11,60 +11,77 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
+        android:orientation="vertical"
         android:background="?attr/colorSurface"
         android:padding="16dp"
         android:layout_marginBottom="16dp">
 
+        <!-- Title -->
         <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="BLE Command Log"
-            android:textColor="?attr/colorOnSurface"
-            android:textSize="24sp"
-            android:textStyle="bold"/>
-
-        <TextView
-            android:id="@+id/connectionStatusText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Status: Not connected"
-            android:textColor="@android:color/holo_red_dark"
-            android:textSize="14sp"
-            android:layout_marginEnd="8dp"/>
-
-        <Button
-            android:id="@+id/clearLogButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Clear"
-            android:textSize="12sp"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"/>
-    </LinearLayout>
-
-    <!-- Log Display -->
-    <ScrollView
-        android:id="@+id/logScrollView"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:background="?attr/colorSurface"
-        android:padding="12dp"
-        android:layout_marginBottom="8dp">
-
-        <TextView
-            android:id="@+id/logText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Waiting for connection...\n\n"
+            android:text="Glove Calibration"
             android:textColor="?attr/colorOnSurface"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="12dp"/>
+
+        <!-- Status and Clear Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/connectionStatusText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Status: Not connected"
+                android:textColor="@android:color/holo_red_dark"
+                android:textSize="14sp"/>
+
+            <Button
+                android:id="@+id/clearLogButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Clear"
+                android:textSize="12sp"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"/>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Calibration Buttons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="?attr/colorSurface"
+        android:padding="8dp"
+        android:layout_marginBottom="8dp">
+
+        <Button
+            android:id="@+id/calibrateFlexButton"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:text="Calibrate Flex Sensors"
             android:textSize="12sp"
-            android:fontFamily="monospace"
-            android:lineSpacingExtra="2dp"/>
-    </ScrollView>
+            android:layout_marginEnd="4dp"
+            android:enabled="false"/>
+
+        <Button
+            android:id="@+id/calibrateImuButton"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:text="Calibrate IMU"
+            android:textSize="12sp"
+            android:layout_marginStart="4dp"
+            android:enabled="false"/>
+    </LinearLayout>
 
     <!-- Command Sender -->
     <LinearLayout
@@ -94,6 +111,30 @@
             android:text="Send"
             android:enabled="false"/>
     </LinearLayout>
+
+    <!-- Log Display -->
+    <ScrollView
+        android:id="@+id/logScrollView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="?attr/colorSurface"
+        android:padding="12dp"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:id="@+id/logText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Waiting for connection...\n\n"
+            android:textColor="?attr/colorOnSurface"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:lineSpacingExtra="2dp"
+            android:scrollHorizontally="false"
+            android:breakStrategy="simple"
+            android:hyphenationFrequency="none"/>
+    </ScrollView>
 
     <!-- Info Footer -->
     <LinearLayout

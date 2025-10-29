@@ -30,6 +30,8 @@ class BLELogActivity : AppCompatActivity() {
     private lateinit var connectionStatusText: TextView
     private lateinit var sendCommandButton: Button
     private lateinit var commandInput: EditText
+    private lateinit var calibrateFlexButton: Button
+    private lateinit var calibrateImuButton: Button
     
     private var bleService: BLEService? = null
     private val logEntries = mutableListOf<String>()
@@ -54,6 +56,8 @@ class BLELogActivity : AppCompatActivity() {
         connectionStatusText = findViewById(R.id.connectionStatusText)
         sendCommandButton = findViewById(R.id.sendCommandButton)
         commandInput = findViewById(R.id.commandInput)
+        calibrateFlexButton = findViewById(R.id.calibrateFlexButton)
+        calibrateImuButton = findViewById(R.id.calibrateImuButton)
         
         // Setup clear button
         clearButton.setOnClickListener {
@@ -63,6 +67,15 @@ class BLELogActivity : AppCompatActivity() {
         // Setup send button
         sendCommandButton.setOnClickListener {
             sendCommand()
+        }
+        
+        // Setup calibration buttons
+        calibrateFlexButton.setOnClickListener {
+            sendCalibrationCommand("cal")
+        }
+        
+        calibrateImuButton.setOnClickListener {
+            sendCalibrationCommand("imu_cal")
         }
 
         // Send on IME action
@@ -106,6 +119,33 @@ class BLELogActivity : AppCompatActivity() {
             addLogEntry("❌ Failed to send: $cmd")
         }
     }
+    
+    /**
+     * Send a calibration command to the glove.
+     */
+    private fun sendCalibrationCommand(command: String) {
+        if (bleService == null || !bleService!!.isConnected()) {
+            addLogEntry("⚠️ Not connected - cannot send: $command")
+            return
+        }
+        
+        val ok = bleService!!.writeCommand(command)
+        if (ok) {
+            addLogEntry(">> $command")
+            when (command) {
+                "cal" -> {
+                    addLogEntry("📝 Starting flex sensor calibration...")
+                    addLogEntry("📝 Follow glove prompts: relax hand, then bend each finger")
+                }
+                "imu_cal" -> {
+                    addLogEntry("📝 Starting IMU calibration...")
+                    addLogEntry("📝 Place glove FLAT and STILL for ~4 seconds")
+                }
+            }
+        } else {
+            addLogEntry("❌ Failed to send: $command")
+        }
+    }
 
     /**
      * Connect to the glove using stored connection info.
@@ -137,10 +177,14 @@ class BLELogActivity : AppCompatActivity() {
                             updateConnectionStatus("Connected ✓", true)
                             addLogEntry("✅ Connected to glove: $deviceAddress")
                             sendCommandButton.isEnabled = true
+                            calibrateFlexButton.isEnabled = true
+                            calibrateImuButton.isEnabled = true
                         } else {
                             updateConnectionStatus("Disconnected", false)
                             addLogEntry("❌ Disconnected from glove")
                             sendCommandButton.isEnabled = false
+                            calibrateFlexButton.isEnabled = false
+                            calibrateImuButton.isEnabled = false
                         }
                     }
                 }
