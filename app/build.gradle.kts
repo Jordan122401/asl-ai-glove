@@ -44,8 +44,11 @@ android {
 
 dependencies {
 
-    // Use standard TensorFlow Lite
+    // Use standard TensorFlow Lite with Select TF Ops support for models with TensorFlow operations
     implementation(libs.tensorflow.lite)
+    // Add Select TF Ops support for models using TensorFlow operations (e.g., TensorListReserve)
+    // Version must match tensorflow-lite version for compatibility
+    implementation(libs.tensorflow.lite.select.tf.ops)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)

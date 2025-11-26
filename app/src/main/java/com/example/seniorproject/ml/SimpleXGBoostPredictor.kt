@@ -9,9 +9,10 @@ import android.util.Log
  */
 class SimpleXGBoostPredictor(
     private val context: Context,
-    private val modelFileName: String = "TFLiteCompatible_XGB.json"
+    private val modelFileName: String = "TFLiteCompatible_XGB.json",
+    requestedNumClass: Int? = null
 ) {
-    private var numClass: Int = 5
+    private var numClass: Int = requestedNumClass ?: 5
     private var isLoaded: Boolean = false
 
     init {
@@ -25,7 +26,10 @@ class SimpleXGBoostPredictor(
     }
 
     private fun setupFallback() {
-        numClass = 5
+        // Keep whatever numClass was requested; if none was provided, default to 5.
+        if (numClass <= 0) {
+            numClass = 5
+        }
         isLoaded = false
         Log.d("SimpleXGBoostPredictor", "Using fallback XGBoost predictor")
     }

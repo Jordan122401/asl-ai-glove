@@ -99,7 +99,11 @@ class FusionASLClassifier(
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to load XGBoost model, using simple fallback", e)
                 xgbPredictor = null
-                simpleXgbPredictor = SimpleXGBoostPredictor(context, xgbModelFileName)
+                simpleXgbPredictor = SimpleXGBoostPredictor(
+                    context = context,
+                    modelFileName = xgbModelFileName,
+                    requestedNumClass = numClasses
+                )
                 
                 // Test simple fallback
                 val testInput = FloatArray(751) { 0.5f }
@@ -138,8 +142,18 @@ class FusionASLClassifier(
 
     private fun loadLabelsOrDefault(expected: Int): List<String> {
         if (labelsFileName == null) {
-            // Default labels for ASL: A, B, C, D, Neutral (or whatever your 5 classes are)
-            return listOf("A", "B", "C", "D", "Neutral").take(expected)
+            // Default labels for ASL.
+            // IMPORTANT: Keep this list in the same order as the model output.
+            // New model: A–I plus Neutral (10 classes).
+            val defaultLabels = listOf(
+                "A", "B", "C", "D", "E", "F", "G", "H", "I", "Neutral"
+            )
+            return if (expected <= defaultLabels.size) {
+                defaultLabels.take(expected)
+            } else {
+                // If model has MORE classes than we know about, pad with generic names
+                defaultLabels + (defaultLabels.size until expected).map { "Class$it" }
+            }
         }
         
         return try {
@@ -148,11 +162,29 @@ class FusionASLClassifier(
                     .readLines()
                     .filter { it.isNotBlank() }
             }.let { lines ->
-                if (lines.size == expected) lines
-                else listOf("A", "B", "C", "D", "Neutral").take(expected)
+                if (lines.size == expected) {
+                    lines
+                } else {
+                    // Fall back to default mapping if label file size is unexpected
+                    val defaultLabels = listOf(
+                        "A", "B", "C", "D", "E", "F", "G", "H", "I", "Neutral"
+                    )
+                    if (expected <= defaultLabels.size) {
+                        defaultLabels.take(expected)
+                    } else {
+                        defaultLabels + (defaultLabels.size until expected).map { "Class$it" }
+                    }
+                }
             }
         } catch (_: Exception) {
-            listOf("A", "B", "C", "D", "Neutral").take(expected)
+            val defaultLabels = listOf(
+                "A", "B", "C", "D", "E", "F", "G", "H", "I", "Neutral"
+            )
+            return if (expected <= defaultLabels.size) {
+                defaultLabels.take(expected)
+            } else {
+                defaultLabels + (defaultLabels.size until expected).map { "Class$it" }
+            }
         }
     }
 
@@ -266,9 +298,9 @@ class FusionASLClassifier(
         Log.d(TAG, "XGBoost best: ${labels[bestXgbIdx]} (${"%.3f".format(bestXgbProb)})")
         
         // Step 5: Fusion - Combine LSTM and XGBoost predictions
-        // Use weighted average: 60% LSTM + 40% XGBoost (balanced approach)
-        val lstmWeight = 0.6f
-        val xgbWeight = 0.4f
+        // Use weighted average: 40% LSTM + 60% XGBoost (XGBoost-weighted approach)
+        val lstmWeight = 0.4f
+        val xgbWeight = 0.6f
         
         val fusedProbs = FloatArray(numClasses)
         for (i in 0 until numClasses) {
@@ -324,7 +356,12 @@ class FusionASLClassifier(
      * Create a simple pattern-based fallback prediction when LSTM fails
      */
     private fun createLSTMFallbackPrediction(sequence: Array<FloatArray>): FloatArray {
-        val prediction = FloatArray(numClasses)
+        // Default to uniform distribution so the size always matches numClasses
+        val prediction = FloatArray(numClasses) { 1.0f / numClasses }
+        
+        // Optionally bias toward some known labels if present (A, B, C, D, Neutral)
+        // without assuming a fixed number of classes.
+        val labelToIndex = labels.withIndex().associate { it.value to it.index }
         
         // Simple pattern matching based on average feature values
         val avgFlex1 = sequence.take(30).map { it[0] }.average().toFloat()
@@ -332,42 +369,34 @@ class FusionASLClassifier(
         val avgRoll = sequence.take(30).map { it[5] }.average().toFloat()
         val avgPitch = sequence.take(30).map { it[6] }.average().toFloat()
         
-        // Pattern-based predictions
+        fun setBias(label: String, mainProb: Float) {
+            val idx = labelToIndex[label] ?: return
+            for (i in prediction.indices) {
+                prediction[i] = (1.0f - mainProb) / (numClasses - 1)
+            }
+            prediction[idx] = mainProb
+        }
+        
         when {
             avgFlex1 > 0.7f -> {
-                prediction[0] = 0.7f // A - high flex1
-                prediction[1] = 0.1f
-                prediction[2] = 0.1f
-                prediction[3] = 0.05f
-                prediction[4] = 0.05f
+                // High flex1 → bias toward A if available
+                setBias("A", 0.7f)
             }
             avgFlex2 > 0.7f -> {
-                prediction[0] = 0.1f
-                prediction[1] = 0.1f
-                prediction[2] = 0.1f
-                prediction[3] = 0.7f // D - high flex2
-                prediction[4] = 0.0f
+                // High flex2 → bias toward D if available
+                setBias("D", 0.7f)
             }
             avgFlex1 < 0.3f && avgFlex2 < 0.3f -> {
-                prediction[0] = 0.1f
-                prediction[1] = 0.7f // B - low flex values
-                prediction[2] = 0.1f
-                prediction[3] = 0.05f
-                prediction[4] = 0.05f
+                // Low flex values → bias toward B if available
+                setBias("B", 0.7f)
             }
             avgFlex1 in 0.4f..0.6f && avgFlex2 in 0.4f..0.6f -> {
-                prediction[0] = 0.1f
-                prediction[1] = 0.1f
-                prediction[2] = 0.7f // C - medium flex values
-                prediction[3] = 0.05f
-                prediction[4] = 0.05f
+                // Medium flex values → bias toward C if available
+                setBias("C", 0.7f)
             }
             else -> {
-                prediction[0] = 0.2f
-                prediction[1] = 0.2f
-                prediction[2] = 0.2f
-                prediction[3] = 0.2f
-                prediction[4] = 0.2f // Neutral
+                // Otherwise bias toward Neutral if available
+                setBias("Neutral", 0.5f)
             }
         }
         

@@ -256,6 +256,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun initFusionModel() {
         try {
+            android.util.Log.d("MainActivity", "Initializing fusion model...")
             // Initialize fusion classifier
             fusionClassifier = FusionASLClassifier(
                 context = this,
@@ -269,10 +270,32 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 numFeatures = fusionClassifier.getNumFeatures()
             )
             
+            android.util.Log.d("MainActivity", "Fusion model initialized successfully")
             
+        } catch (e: OutOfMemoryError) {
+            android.util.Log.e("MainActivity", "Out of memory loading model", e)
+            runOnUiThread {
+                Toast.makeText(this, "Model too large for device memory. Please use a smaller model.", Toast.LENGTH_LONG).show()
+            }
+            throw e
         } catch (e: Exception) {
             android.util.Log.e("MainActivity", "Failed to initialize fusion model", e)
-            Toast.makeText(this, "Failed to load fusion model: ${e.message}", Toast.LENGTH_LONG).show()
+            android.util.Log.e("MainActivity", "Error type: ${e.javaClass.simpleName}")
+            android.util.Log.e("MainActivity", "Error message: ${e.message}")
+            e.printStackTrace()
+            runOnUiThread {
+                val errorMsg = when {
+                    e.message?.contains("too large", ignoreCase = true) == true -> 
+                        "Model file is too large for this device"
+                    e.message?.contains("not found", ignoreCase = true) == true -> 
+                        "Model file not found. Please check assets folder."
+                    e.message?.contains("parse", ignoreCase = true) == true -> 
+                        "Model file format error. Please check the model file."
+                    else -> "Failed to load model: ${e.message ?: "Unknown error"}"
+                }
+                Toast.makeText(this, errorMsg, Toast.LENGTH_LONG).show()
+            }
+            throw e
         }
     }
     

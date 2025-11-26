@@ -34,9 +34,12 @@ class XGBoostPredictor(
     }
 
     private fun loadModel() {
+        var inputStream: java.io.InputStream? = null
+        var reader: InputStreamReader? = null
         try {
-            val inputStream = context.assets.open(modelFileName)
-            val reader = InputStreamReader(inputStream)
+            Log.d("XGBoostPredictor", "Loading XGBoost model from: $modelFileName")
+            inputStream = context.assets.open(modelFileName)
+            reader = InputStreamReader(inputStream, "UTF-8")
             val gson = Gson()
             
             // Try to parse as JsonObject first (standard XGBoost format)
@@ -48,26 +51,57 @@ class XGBoostPredictor(
                     val learner = jsonObject.getAsJsonObject("learner")
                     val learnerModelParam = learner.getAsJsonObject("learner_model_param")
                     numClass = learnerModelParam.get("num_class").asInt
-                    baseScore = learnerModelParam.get("base_score").asFloat
+                    
+                    // Handle base_score - it can be a float or a string array
+                    val baseScoreElement = learnerModelParam.get("base_score")
+                    baseScore = try {
+                        // Try as float first
+                        baseScoreElement.asFloat
+                    } catch (e: Exception) {
+                        // If it's a string array like "[2E-1,2.2564103E-1,...]", use first value or default
+                        try {
+                            val baseScoreStr = baseScoreElement.asString
+                            if (baseScoreStr.startsWith("[") && baseScoreStr.endsWith("]")) {
+                                // Parse first value from array string
+                                val firstValue = baseScoreStr.removePrefix("[").removeSuffix("]").split(",").firstOrNull()
+                                firstValue?.toFloatOrNull() ?: 0.5f
+                            } else {
+                                baseScoreStr.toFloatOrNull() ?: 0.5f
+                            }
+                        } catch (e2: Exception) {
+                            Log.w("XGBoostPredictor", "Could not parse base_score, using default 0.5", e2)
+                            0.5f
+                        }
+                    }
+                    
+                    Log.d("XGBoostPredictor", "Model params: numClass=$numClass, baseScore=$baseScore")
                     
                     val gradientBooster = learner.getAsJsonObject("gradient_booster")
                     val model = gradientBooster.getAsJsonObject("model")
                     val treesArray = model.getAsJsonArray("trees")
                     
+                    Log.d("XGBoostPredictor", "Found ${treesArray.size()} trees to parse")
+                    
                     trees = treesArray.mapIndexed { index, treeElement ->
-                        Log.d("XGBoostPredictor", "Parsing tree $index")
+                        if (index % 100 == 0) {
+                            Log.d("XGBoostPredictor", "Parsing tree $index/${treesArray.size()}")
+                        }
                         val tree = parseTree(treeElement.asJsonObject)
-                        Log.d("XGBoostPredictor", "Tree $index parsed successfully: ${if (tree.leaf != null) "leaf=${tree.leaf}" else "split=${tree.split}"}")
                         tree
                     }
+                    
+                    Log.d("XGBoostPredictor", "Successfully parsed ${trees.size} trees")
                 } else {
                     throw Exception("No learner found in JSON")
                 }
             } catch (e: Exception) {
+                Log.w("XGBoostPredictor", "Failed to parse as standard format, trying array format", e)
                 // Reset reader and try as JsonArray (direct tree format)
-                reader.close()
-                val newReader = InputStreamReader(context.assets.open(modelFileName))
-                val treesArray = gson.fromJson(newReader, com.google.gson.JsonArray::class.java)
+                reader?.close()
+                inputStream?.close()
+                inputStream = context.assets.open(modelFileName)
+                reader = InputStreamReader(inputStream, "UTF-8")
+                val treesArray = gson.fromJson(reader, com.google.gson.JsonArray::class.java)
                 
                 // For array format, use default values
                 numClass = 5
@@ -76,21 +110,33 @@ class XGBoostPredictor(
                 trees = treesArray.map { treeElement ->
                     parseTree(treeElement.asJsonObject)
                 }
-                newReader.close()
+            }
+            
+            if (trees.isEmpty()) {
+                throw Exception("No trees loaded from model file")
             }
             
             Log.d("XGBoostPredictor", "Loaded ${trees.size} trees, $numClass classes")
-            reader.close()
+        } catch (e: OutOfMemoryError) {
+            Log.e("XGBoostPredictor", "Out of memory loading XGBoost model. File may be too large.", e)
+            throw Exception("Model file too large for device memory. Consider using a smaller model or SimpleXGBoostPredictor.", e)
         } catch (e: Exception) {
-            Log.e("XGBoostPredictor", "Failed to load XGBoost model", e)
-            throw e
+            Log.e("XGBoostPredictor", "Failed to load XGBoost model from $modelFileName", e)
+            Log.e("XGBoostPredictor", "Error type: ${e.javaClass.simpleName}, message: ${e.message}")
+            e.printStackTrace()
+            throw Exception("Failed to load XGBoost model: ${e.message}", e)
+        } finally {
+            try {
+                reader?.close()
+                inputStream?.close()
+            } catch (e: Exception) {
+                Log.w("XGBoostPredictor", "Error closing streams", e)
+            }
         }
     }
 
     private fun parseTree(treeJson: JsonObject): TreeNode {
         try {
-            Log.d("XGBoostPredictor", "Parsing tree with keys: ${treeJson.keySet()}")
-            
             // XGBoost JSON format - arrays are indexed by node position
             val leftChildren = treeJson.getAsJsonArray("left_children").map { it.asInt }
             val rightChildren = treeJson.getAsJsonArray("right_children").map { it.asInt }
@@ -101,8 +147,6 @@ class XGBoostPredictor(
             
             // Create node IDs based on array indices (0, 1, 2, ...)
             val nodeIds = (0 until leftChildren.size).toList()
-            
-            Log.d("XGBoostPredictor", "Tree arrays: nodes=${nodeIds.size}, left=${leftChildren.size}, right=${rightChildren.size}, splits=${splitIndices.size}")
             
             // Build tree structure (root is always node 0)
             return buildTreeNode(0, nodeIds, leftChildren, rightChildren, splitIndices, splitConditions, baseWeights)
@@ -160,23 +204,15 @@ class XGBoostPredictor(
         // Initialize raw scores (logits) with base score
         val rawScores = FloatArray(numClass) { baseScore }
         
-        Log.d("XGBoostPredictor", "Predicting with ${trees.size} trees, baseScore=$baseScore")
-        
         // Accumulate predictions from all trees
         trees.forEachIndexed { treeIdx, tree ->
             val treeOutput = predictTree(tree, features)
             val classIdx = treeIdx % numClass
             rawScores[classIdx] += treeOutput
-            if (treeIdx < 5) { // Log first 5 trees
-                Log.d("XGBoostPredictor", "Tree $treeIdx -> class $classIdx, output=$treeOutput, rawScore=${rawScores[classIdx]}")
-            }
         }
-        
-        Log.d("XGBoostPredictor", "Raw scores before softmax: ${rawScores.joinToString { "%.3f".format(it) }}")
         
         // Apply softmax to convert to probabilities
         val result = softmax(rawScores)
-        Log.d("XGBoostPredictor", "Final probabilities: ${result.joinToString { "%.3f".format(it) }}")
         return result
     }
 
