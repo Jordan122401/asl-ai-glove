@@ -107,7 +107,7 @@ flex1,flex2,flex3,flex4,flex5,roll,pitch,ax,ay,az
 - **Confidence**: Minimum 50% to accept prediction
 - **Stability**: Requires 3 consecutive identical predictions
 - **Buffer Size**: Needs at least 37 timesteps (50% of 75)
-- **Neutral Filter**: "Neutral" gestures not added to text
+- **Neutral Filter**: "neutral" gestures not added to text
 
 ---
 

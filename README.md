@@ -157,7 +157,7 @@ flex1, flex2, flex3, flex4, flex5, roll, pitch, ax, ay, az
 1. **LSTM Layer**: Processes sequences of 75 timesteps
 2. **Dense Layers**: Extracts features from sequence
 3. **XGBoost**: Final classification with residual learning
-4. **Output**: 5 classes (A, B, C, D, Neutral) with confidence scores
+4. **Output**: 5 classes (A, B, C, D, neutral) with confidence scores
 
 ### Prediction Logic
 
@@ -165,7 +165,7 @@ flex1, flex2, flex3, flex4, flex5, roll, pitch, ax, ay, az
 - **Minimum Fill**: 50% (37 timesteps) before prediction
 - **Stability**: 3 consecutive identical predictions required
 - **Confidence**: 50% minimum to accept prediction
-- **Filtering**: "Neutral" gestures excluded from text
+- **Filtering**: "neutral" gestures excluded from text
 
 ## 📊 Performance
 

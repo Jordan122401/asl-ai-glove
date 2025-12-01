@@ -108,7 +108,7 @@ adb logcat -c
 When working correctly, you should see logs like:
 
 ```
-D/FusionASLClassifier: Fusion model loaded: 5 classes, A, B, C, D, Neutral
+D/FusionASLClassifier: Fusion model loaded: 5 classes, A, B, C, D, neutral
 D/FusionDemo: Buffer: 75/75, Prediction: Prediction(label='A', prob=0.876, ...)
 D/FusionDemo: Buffer: 75/75, Prediction: Prediction(label='A', prob=0.891, ...)
 D/FusionDemo: Buffer: 75/75, Prediction: Prediction(label='A', prob=0.883, ...)

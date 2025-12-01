@@ -86,7 +86,7 @@ class SimpleXGBoostPredictor(
                 prediction[1] = 0.05f
                 prediction[2] = 0.05f
                 prediction[3] = 0.05f
-                prediction[4] = 0.8f // Neutral
+                prediction[4] = 0.8f // neutral
             }
         }
         

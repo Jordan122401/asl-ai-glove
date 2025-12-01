@@ -402,7 +402,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     
                     // Append to text box for each 75-sample batch
                     withContext(Dispatchers.Main) {
-                        if (pred.label == "Neutral") {
+                        if (pred.label == "neutral") {
                             inputEdit.append(" ")
                         } else {
                             inputEdit.append(pred.label)

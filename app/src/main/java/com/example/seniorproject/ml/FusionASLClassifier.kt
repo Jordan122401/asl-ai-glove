@@ -144,9 +144,12 @@ class FusionASLClassifier(
         if (labelsFileName == null) {
             // Default labels for ASL.
             // IMPORTANT: Keep this list in the same order as the model output.
-            // New model: A–I plus Neutral (10 classes).
+            // New model: A–Z plus neutral (27 classes).
             val defaultLabels = listOf(
-                "A", "B", "C", "D", "E", "F", "G", "H", "I", "Neutral"
+                "A", "B", "C", "D", "E", "F", "G", "H", "I",
+                "J", "K", "L", "M", "N", "O", "P", "Q", "R",
+                "S", "T", "U", "V", "W", "X", "Y", "Z",
+                "neutral"
             )
             return if (expected <= defaultLabels.size) {
                 defaultLabels.take(expected)
@@ -167,7 +170,10 @@ class FusionASLClassifier(
                 } else {
                     // Fall back to default mapping if label file size is unexpected
                     val defaultLabels = listOf(
-                        "A", "B", "C", "D", "E", "F", "G", "H", "I", "Neutral"
+                        "A", "B", "C", "D", "E", "F", "G", "H", "I",
+                        "J", "K", "L", "M", "N", "O", "P", "Q", "R",
+                        "S", "T", "U", "V", "W", "X", "Y", "Z",
+                        "neutral"
                     )
                     if (expected <= defaultLabels.size) {
                         defaultLabels.take(expected)
@@ -178,7 +184,10 @@ class FusionASLClassifier(
             }
         } catch (_: Exception) {
             val defaultLabels = listOf(
-                "A", "B", "C", "D", "E", "F", "G", "H", "I", "Neutral"
+                "A", "B", "C", "D", "E", "F", "G", "H", "I",
+                "J", "K", "L", "M", "N", "O", "P", "Q", "R",
+                "S", "T", "U", "V", "W", "X", "Y", "Z",
+                "neutral"
             )
             return if (expected <= defaultLabels.size) {
                 defaultLabels.take(expected)
@@ -359,7 +368,7 @@ class FusionASLClassifier(
         // Default to uniform distribution so the size always matches numClasses
         val prediction = FloatArray(numClasses) { 1.0f / numClasses }
         
-        // Optionally bias toward some known labels if present (A, B, C, D, Neutral)
+        // Optionally bias toward some known labels if present (A, B, C, D, neutral)
         // without assuming a fixed number of classes.
         val labelToIndex = labels.withIndex().associate { it.value to it.index }
         
@@ -395,8 +404,8 @@ class FusionASLClassifier(
                 setBias("C", 0.7f)
             }
             else -> {
-                // Otherwise bias toward Neutral if available
-                setBias("Neutral", 0.5f)
+                // Otherwise bias toward neutral if available
+                setBias("neutral", 0.5f)
             }
         }
         
