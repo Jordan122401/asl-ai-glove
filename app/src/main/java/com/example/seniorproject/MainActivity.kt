@@ -403,6 +403,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     // Append to text box for each 75-sample batch
                     withContext(Dispatchers.Main) {
                         when (pred.label.lowercase()) {
+                            "backspace" -> {
+                                // Remove the last character if text is not empty
+                                val currentText = inputEdit.text.toString()
+                                if (currentText.isNotEmpty()) {
+                                    inputEdit.setText(currentText.dropLast(1))
+                                    // Move cursor to end
+                                    inputEdit.setSelection(inputEdit.text.length)
+                                }
+                            }
                             "neutral" -> {
                                 inputEdit.append(" ")
                             }
