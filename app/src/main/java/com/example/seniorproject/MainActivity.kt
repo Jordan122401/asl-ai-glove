@@ -109,7 +109,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         // Connect Text button: keep your existing behavior (concat + TTS)
         buttonConnect.setOnClickListener {
             val lines = editTextInput.text.toString().split("\n")
-            val connected = lines.joinToString(" ") { it.replace(" ", "") }
+            val connected = lines.joinToString(" ")
             textViewResult.text = connected
             textViewResult.textSize = fontSize.toFloat()
 
@@ -462,7 +462,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             updateStreamButtons()
             if (userInitiated) {
                 val lines = editTextInput.text.toString().split("\n")
-                val connected = lines.joinToString(" ") { it.replace(" ", "") }
+                val connected = lines.joinToString(" ")
                 textViewResult.text = connected
                 textViewResult.textSize = fontSize.toFloat()
                 if (ttsEnabled && connected.isNotBlank()) {

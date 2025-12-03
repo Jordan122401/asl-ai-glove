@@ -12,15 +12,12 @@ import java.nio.channels.FileChannel
 
 /**
  * Fusion classifier combining LSTM + XGBoost for ASL gesture recognition.
- * 
- * Model Architecture (from Our_model.ipynb - Model Three):
+ * * Model Architecture (from Our_model.ipynb - Model Three):
  * 1. LSTM processes sequences of sensor data (75 timesteps x 10 features)
  * 2. XGBoost uses flattened sequence + residual for final classification
- * 
- * Input features (10): flex1, flex2, flex3, flex4, flex5, roll_deg, pitch_deg, ax_g, ay_g, az_g
+ * * Input features (10): flex1, flex2, flex3, flex4, flex5, roll_deg, pitch_deg, ax_g, ay_g, az_g
  * Sequence length: 75 timesteps
- * 
- * Inference flow:
+ * * Inference flow:
  * 1. Collect 75 timesteps of sensor data
  * 2. Pass through LSTM to get class probabilities
  * 3. Flatten sequence data (75 * 10 = 750 features)
@@ -46,11 +43,11 @@ class FusionASLClassifier(
     private var simpleXgbPredictor: SimpleXGBoostPredictor? = null
     private var numClasses: Int = -1
     private lateinit var labels: List<String>
-    
+
     // Buffers for LSTM
     private val lstmInputBuffer = Array(1) { Array(SEQUENCE_LENGTH) { FloatArray(NUM_FEATURES) } }
     private lateinit var lstmOutputBuffer: Array<FloatArray>
-    
+
     // Buffer for XGBoost (flattened sequence + residual)
     private lateinit var xgbInputBuffer: FloatArray
 
@@ -62,40 +59,40 @@ class FusionASLClassifier(
                 // Allow TensorFlow ops fallback if needed
                 setAllowFp16PrecisionForFp32(false)
             }
-            
+
             lstmInterpreter = Interpreter(loadModelFile(lstmModelFileName), lstmOptions)
-            
+
             // Set input shape for LSTM: [1, 75, 10]
             lstmInterpreter.resizeInput(0, intArrayOf(1, SEQUENCE_LENGTH, NUM_FEATURES))
             lstmInterpreter.allocateTensors()
-            
+
             // Auto-detect number of classes from LSTM output
-            val outShape = lstmInterpreter.getOutputTensor(0).shape() // e.g., [1, 5]
+            val outShape = lstmInterpreter.getOutputTensor(0).shape() // e.g., [1, 28]
             require(outShape.size == 2 && outShape[0] == 1) {
                 "Unexpected LSTM output shape: ${outShape.contentToString()}"
             }
             numClasses = outShape[1]
             lstmOutputBuffer = Array(1) { FloatArray(numClasses) }
-            
+
             // XGBoost expects: 750 (flattened) + 1 (residual) = 751 features
             xgbInputBuffer = FloatArray(SEQUENCE_LENGTH * NUM_FEATURES + 1)
-            
+
             // Load XGBoost model with fallback
             try {
                 xgbPredictor = XGBoostPredictor(context, xgbModelFileName)
                 Log.d(TAG, "XGBoost model loaded successfully")
-                
+
                 // Test XGBoost with dummy data to verify it's working
                 val testInput = FloatArray(751) { 0.5f }
                 val testOutput = xgbPredictor?.predict(testInput) ?: FloatArray(numClasses) { 1.0f / numClasses }
                 Log.d(TAG, "XGBoost test output: ${testOutput.joinToString { "%.3f".format(it) }}")
-                
+
                 // Check if XGBoost is producing uniform probabilities (indicates dummy trees)
                 val isUniform = testOutput.all { kotlin.math.abs(it - testOutput[0]) < 0.001f }
                 if (isUniform) {
                     Log.w(TAG, "XGBoost is producing uniform probabilities - likely using dummy trees")
                 }
-                
+
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to load XGBoost model, using simple fallback", e)
                 xgbPredictor = null
@@ -104,26 +101,26 @@ class FusionASLClassifier(
                     modelFileName = xgbModelFileName,
                     requestedNumClass = numClasses
                 )
-                
+
                 // Test simple fallback
                 val testInput = FloatArray(751) { 0.5f }
                 val testOutput = simpleXgbPredictor?.predict(testInput) ?: FloatArray(numClasses) { 1.0f / numClasses }
                 Log.d(TAG, "Simple XGBoost fallback test output: ${testOutput.joinToString { "%.3f".format(it) }}")
             }
-            
+
             // Load labels
             labels = loadLabelsOrDefault(numClasses)
             require(labels.size == numClasses) {
                 "Labels count (${labels.size}) must equal detected numClasses ($numClasses)."
             }
-            
+
             Log.d(TAG, "Fusion model loaded: $numClasses classes, ${labels.joinToString()}")
-            
+
             // Test LSTM with dummy data to verify it's working
             val dummySequence = Array(75) { FloatArray(10) { 0.5f } }
             val testPrediction = predict(dummySequence)
             Log.d(TAG, "LSTM test prediction: $testPrediction")
-            
+
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load fusion model", e)
             Log.e(TAG, "Error details: ${e.message}")
@@ -144,11 +141,12 @@ class FusionASLClassifier(
         if (labelsFileName == null) {
             // Default labels for ASL.
             // IMPORTANT: Keep this list in the same order as the model output.
-            // New model: A–Z plus neutral (27 classes).
+            // New model: A–Z, backspace, neutral (28 classes).
             val defaultLabels = listOf(
                 "A", "B", "C", "D", "E", "F", "G", "H", "I",
                 "J", "K", "L", "M", "N", "O", "P", "Q", "R",
                 "S", "T", "U", "V", "W", "X", "Y", "Z",
+                "backspace",
                 "neutral"
             )
             return if (expected <= defaultLabels.size) {
@@ -158,7 +156,7 @@ class FusionASLClassifier(
                 defaultLabels + (defaultLabels.size until expected).map { "Class$it" }
             }
         }
-        
+
         return try {
             context.assets.open(labelsFileName).use { input ->
                 BufferedReader(InputStreamReader(input))
@@ -173,6 +171,7 @@ class FusionASLClassifier(
                         "A", "B", "C", "D", "E", "F", "G", "H", "I",
                         "J", "K", "L", "M", "N", "O", "P", "Q", "R",
                         "S", "T", "U", "V", "W", "X", "Y", "Z",
+                        "backspace",
                         "neutral"
                     )
                     if (expected <= defaultLabels.size) {
@@ -187,6 +186,7 @@ class FusionASLClassifier(
                 "A", "B", "C", "D", "E", "F", "G", "H", "I",
                 "J", "K", "L", "M", "N", "O", "P", "Q", "R",
                 "S", "T", "U", "V", "W", "X", "Y", "Z",
+                "backspace",
                 "neutral"
             )
             return if (expected <= defaultLabels.size) {
@@ -206,17 +206,16 @@ class FusionASLClassifier(
     ) {
         override fun toString(): String {
             return "Prediction(label='$label', prob=${"%.3f".format(probability)}, " +
-                   "lstm=${lstmProbabilities.joinToString(prefix = "[", postfix = "]") { "%.2f".format(it) }}, " +
-                   "xgb=${xgbProbabilities.joinToString(prefix = "[", postfix = "]") { "%.2f".format(it) }})"
+                    "lstm=${lstmProbabilities.joinToString(prefix = "[", postfix = "]") { "%.2f".format(it) }}, " +
+                    "xgb=${xgbProbabilities.joinToString(prefix = "[", postfix = "]") { "%.2f".format(it) }})"
         }
     }
 
     /**
      * Predict ASL gesture from a sequence of sensor readings.
-     * 
-     * @param sequence 2D array of shape [timesteps, features] where timesteps <= 75
-     *                 If timesteps < 75, sequence will be padded with zeros (post-padding)
-     *                 If timesteps > 75, sequence will be truncated
+     * * @param sequence 2D array of shape [timesteps, features] where timesteps <= 75
+     * If timesteps < 75, sequence will be padded with zeros (post-padding)
+     * If timesteps > 75, sequence will be truncated
      * @return Prediction containing class label, probability, and intermediate outputs
      */
     @WorkerThread
@@ -226,17 +225,17 @@ class FusionASLClassifier(
             Log.w(TAG, "Sequence is null, returning null prediction")
             return null
         }
-        
+
         Log.d(TAG, "Predicting with sequence of ${sequence.size} timesteps")
-        
+
         require(sequence.isNotEmpty()) { "Sequence cannot be empty" }
         require(sequence[0].size == NUM_FEATURES) {
             "Expected $NUM_FEATURES features per timestep, got ${sequence[0].size}"
         }
-        
+
         // Step 1: Prepare LSTM input with padding/truncation
         val paddedSequence = padSequence(sequence)
-        
+
         // Copy to LSTM input buffer with validation
         for (t in 0 until SEQUENCE_LENGTH) {
             for (f in 0 until NUM_FEATURES) {
@@ -249,7 +248,7 @@ class FusionASLClassifier(
                 }
             }
         }
-        
+
         // Step 2: Run LSTM inference with error handling
         val lstmProbs = try {
             lstmInterpreter.run(lstmInputBuffer, lstmOutputBuffer)
@@ -259,9 +258,9 @@ class FusionASLClassifier(
             // Create a simple pattern-based fallback instead of uniform probabilities
             createLSTMFallbackPrediction(paddedSequence)
         }
-        
+
         Log.d(TAG, "LSTM output: ${lstmProbs.joinToString { "%.3f".format(it) }}")
-        
+
         // Find best LSTM prediction for comparison
         var bestLstmIdx = 0
         var bestLstmProb = lstmProbs[0]
@@ -272,7 +271,7 @@ class FusionASLClassifier(
             }
         }
         Log.d(TAG, "LSTM best: ${labels[bestLstmIdx]} (${"%.3f".format(bestLstmProb)})")
-        
+
         // Step 3: Prepare XGBoost input
         // Flatten the padded sequence
         var idx = 0
@@ -281,10 +280,10 @@ class FusionASLClassifier(
                 xgbInputBuffer[idx++] = paddedSequence[t][f]
             }
         }
-        
+
         // Add residual (0 for new samples, as we don't know the true label)
         xgbInputBuffer[idx] = 0f
-        
+
         // Step 4: Run XGBoost inference with fallback
         val xgbProbs = try {
             xgbPredictor?.predict(xgbInputBuffer) ?: throw IllegalStateException("XGBoost predictor not loaded")
@@ -292,9 +291,9 @@ class FusionASLClassifier(
             Log.w(TAG, "XGBoost prediction failed, using simple fallback", e)
             simpleXgbPredictor?.predict(xgbInputBuffer) ?: FloatArray(numClasses) { 1.0f / numClasses }
         }
-        
+
         Log.d(TAG, "XGBoost output: ${xgbProbs.joinToString { "%.3f".format(it) }}")
-        
+
         // Find best XGBoost prediction for comparison
         var bestXgbIdx = 0
         var bestXgbProb = xgbProbs[0]
@@ -305,17 +304,17 @@ class FusionASLClassifier(
             }
         }
         Log.d(TAG, "XGBoost best: ${labels[bestXgbIdx]} (${"%.3f".format(bestXgbProb)})")
-        
+
         // Step 5: Fusion - Combine LSTM and XGBoost predictions
         // Use weighted average: 40% LSTM + 60% XGBoost (XGBoost-weighted approach)
         val lstmWeight = 0.4f
         val xgbWeight = 0.6f
-        
+
         val fusedProbs = FloatArray(numClasses)
         for (i in 0 until numClasses) {
             fusedProbs[i] = lstmWeight * lstmProbs[i] + xgbWeight * xgbProbs[i]
         }
-        
+
         // Find best prediction from fused probabilities
         var bestIdx = 0
         var bestProb = fusedProbs[0]
@@ -325,10 +324,10 @@ class FusionASLClassifier(
                 bestIdx = i
             }
         }
-        
+
         Log.d(TAG, "Fusion output: ${fusedProbs.joinToString { "%.3f".format(it) }}")
         Log.d(TAG, "Fusion best: ${labels[bestIdx]} (${"%.3f".format(bestProb)})")
-        
+
         return Prediction(
             index = bestIdx,
             label = labels[bestIdx],
@@ -360,24 +359,24 @@ class FusionASLClassifier(
     fun close() {
         lstmInterpreter.close()
     }
-    
+
     /**
      * Create a simple pattern-based fallback prediction when LSTM fails
      */
     private fun createLSTMFallbackPrediction(sequence: Array<FloatArray>): FloatArray {
         // Default to uniform distribution so the size always matches numClasses
         val prediction = FloatArray(numClasses) { 1.0f / numClasses }
-        
+
         // Optionally bias toward some known labels if present (A, B, C, D, neutral)
         // without assuming a fixed number of classes.
         val labelToIndex = labels.withIndex().associate { it.value to it.index }
-        
+
         // Simple pattern matching based on average feature values
         val avgFlex1 = sequence.take(30).map { it[0] }.average().toFloat()
         val avgFlex2 = sequence.take(30).map { it[1] }.average().toFloat()
         val avgRoll = sequence.take(30).map { it[5] }.average().toFloat()
         val avgPitch = sequence.take(30).map { it[6] }.average().toFloat()
-        
+
         fun setBias(label: String, mainProb: Float) {
             val idx = labelToIndex[label] ?: return
             for (i in prediction.indices) {
@@ -385,7 +384,7 @@ class FusionASLClassifier(
             }
             prediction[idx] = mainProb
         }
-        
+
         when {
             avgFlex1 > 0.7f -> {
                 // High flex1 → bias toward A if available
@@ -408,24 +407,23 @@ class FusionASLClassifier(
                 setBias("neutral", 0.5f)
             }
         }
-        
+
         Log.d(TAG, "Using LSTM fallback prediction based on patterns")
         return prediction
     }
-    
+
     /**
      * Get the expected number of features per timestep
      */
     fun getNumFeatures() = NUM_FEATURES
-    
+
     /**
      * Get the expected sequence length
      */
     fun getSequenceLength() = SEQUENCE_LENGTH
-    
+
     /**
      * Get the list of class labels
      */
     fun getLabels() = labels.toList()
 }
-
