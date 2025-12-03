@@ -112,7 +112,9 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:fillViewport="true"
-            android:scrollbars="vertical">
+            android:scrollbars="vertical"
+            android:paddingBottom="8dp"
+            android:clipToPadding="false">
 
             <TextView
                 android:id="@+id/connectedText"
@@ -122,8 +124,12 @@
                 android:textSize="20sp"
                 android:textColor="?attr/colorOnSurface"
                 android:gravity="center"
-                android:padding="12dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:paddingTop="12dp"
+                android:paddingBottom="32dp"
                 android:minHeight="48dp"
+                android:includeFontPadding="false"
                 android:breakStrategy="high_quality"
                 android:hyphenationFrequency="normal"
                 android:lineSpacingExtra="4dp" />
