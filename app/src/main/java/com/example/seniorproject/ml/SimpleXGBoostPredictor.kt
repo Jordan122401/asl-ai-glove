@@ -47,46 +47,43 @@ class SimpleXGBoostPredictor(
         // Simple heuristic-based prediction
         // This is a placeholder - in practice, you might implement
         // a simplified version of the XGBoost logic
-        val prediction = FloatArray(numClass)
+        val prediction = FloatArray(numClass) { 1.0f / numClass }
         
         // Simple rule-based prediction based on feature values
-        val avgFeature = features.take(10).average().toFloat() // Use first 10 features
-        
-        when {
-            avgFeature < 0.3f -> {
-                prediction[0] = 0.8f // A
-                prediction[1] = 0.05f
-                prediction[2] = 0.05f
-                prediction[3] = 0.05f
-                prediction[4] = 0.05f
-            }
-            avgFeature < 0.5f -> {
-                prediction[0] = 0.05f
-                prediction[1] = 0.8f // B
-                prediction[2] = 0.05f
-                prediction[3] = 0.05f
-                prediction[4] = 0.05f
-            }
-            avgFeature < 0.7f -> {
-                prediction[0] = 0.05f
-                prediction[1] = 0.05f
-                prediction[2] = 0.8f // C
-                prediction[3] = 0.05f
-                prediction[4] = 0.05f
-            }
-            avgFeature < 0.9f -> {
-                prediction[0] = 0.05f
-                prediction[1] = 0.05f
-                prediction[2] = 0.05f
-                prediction[3] = 0.8f // D
-                prediction[4] = 0.05f
-            }
-            else -> {
-                prediction[0] = 0.05f
-                prediction[1] = 0.05f
-                prediction[2] = 0.05f
-                prediction[3] = 0.05f
-                prediction[4] = 0.8f // neutral
+        // Only apply heuristics if we have at least 5 classes
+        if (numClass >= 5) {
+            val avgFeature = features.take(10).average().toFloat() // Use first 10 features
+            val uniformProb = 1.0f / numClass
+            val biasProb = 0.8f
+            val otherProb = (1.0f - biasProb) / (numClass - 1)
+            
+            when {
+                avgFeature < 0.3f -> {
+                    // Bias toward A (index 0)
+                    prediction.fill(otherProb)
+                    prediction[0] = biasProb
+                }
+                avgFeature < 0.5f -> {
+                    // Bias toward B (index 1) if available
+                    prediction.fill(otherProb)
+                    if (numClass > 1) prediction[1] = biasProb else prediction[0] = biasProb
+                }
+                avgFeature < 0.7f -> {
+                    // Bias toward C (index 2) if available
+                    prediction.fill(otherProb)
+                    if (numClass > 2) prediction[2] = biasProb else prediction[0] = biasProb
+                }
+                avgFeature < 0.9f -> {
+                    // Bias toward D (index 3) if available
+                    prediction.fill(otherProb)
+                    if (numClass > 3) prediction[3] = biasProb else prediction[0] = biasProb
+                }
+                else -> {
+                    // Bias toward neutral (last index) if available
+                    prediction.fill(otherProb)
+                    val neutralIdx = numClass - 1
+                    prediction[neutralIdx] = biasProb
+                }
             }
         }
         

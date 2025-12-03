@@ -76,18 +76,46 @@ class ASLClassifier(
 
     // Accept expected count so labels match model output
     private fun loadLabelsOrAlphabet(expected: Int): List<String> {
-        labelsFileName ?: return (0 until expected).map { ('A' + it).toString() }
+        // Default labels: A-Z + neutral (27 classes)
+        val defaultLabels = listOf(
+            "A", "B", "C", "D", "E", "F", "G", "H", "I",
+            "J", "K", "L", "M", "N", "O", "P", "Q", "R",
+            "S", "T", "U", "V", "W", "X", "Y", "Z",
+            "neutral"
+        )
+        
+        if (labelsFileName == null) {
+            return if (expected <= defaultLabels.size) {
+                defaultLabels.take(expected)
+            } else {
+                defaultLabels + (defaultLabels.size until expected).map { "Class$it" }
+            }
+        }
+        
         return try {
             context.assets.open(labelsFileName).use { input ->
                 BufferedReader(InputStreamReader(input))
                     .readLines()
                     .filter { it.isNotBlank() }
             }.let { lines ->
-                if (lines.size == expected) lines
-                else (0 until expected).map { ('A' + it).toString() }
+                if (lines.size == expected) {
+                    lines
+                } else {
+                    // Fall back to default labels if size doesn't match
+                    if (expected <= defaultLabels.size) {
+                        defaultLabels.take(expected)
+                    } else {
+                        defaultLabels + (defaultLabels.size until expected).map { "Class$it" }
+                    }
+                }
             }
         } catch (_: Exception) {
-            (0 until expected).map { ('A' + it).toString() }
+            // Fall back to default labels on error
+            if (expected <= defaultLabels.size) {
+                defaultLabels.take(expected)
+            } else {
+                defaultLabels + (defaultLabels.size until expected).map { "Class$it" }
+            }
         }
     }
 
