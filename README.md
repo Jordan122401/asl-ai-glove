@@ -21,7 +21,6 @@
 ### Video Demonstration
 [![ASL Translation Glove Demo](https://img.youtube.com/vi/YOUR_VIDEO_ID/maxresdefault.jpg)](https://www.youtube.com/watch?v=YOUR_VIDEO_ID)
 
-> **Note:** Replace `YOUR_VIDEO_ID` with your actual YouTube video ID
 
 ### 📸 Project Gallery
 
@@ -39,7 +38,9 @@
 
 **Testing & Calibration**
 <p align="center">
-  <img src="docs/images/your_image.jpg" width="500" alt="Description" />
+  <img src="docs/images/your_image_2.jpg" width="500" alt="Description" />
+  <img src="docs/gifs/demo.gif" width="420" />
+
 </p>
 
 ---
@@ -143,7 +144,7 @@
 
 ## 🤖 Fusion Model (AI + ML)
 
-**Model Architecture:** Hybrid (stacked) BiLSTM + XGBoost
+**Model Architecture:** Hybrid (stacked) LSTM + XGBoost
 - LSTM learns sequence features from sensor windows
 - XGBoost refines the prediction using LSTM residual/error information
 
@@ -211,10 +212,7 @@ This repo is organized as a clean monorepo:
 
 ---
 
-## 📄 License
-
-[Add your license here]
-
----
-
 <p align="center">Made with ❤️ by the SignCast Team</p>
+
+<p align="center">
+  <img src="docs/images/team_shot.jpg" width="260" alt="SignCast Logo" /> </p>
