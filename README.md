@@ -18,7 +18,7 @@
 - **Photos:** (hero image above) + screenshots below
 
 <p align="center">
-  <img src="docs/images/app_screenshot_1.png" width="260" />
+  <img src="docs/images/signcast_logo.png" width="260" />
   <img src="docs/images/app_screenshot_2.png" width="260" />
 </p>
 
@@ -46,9 +46,12 @@
 ![PCB](docs/images/pcb_glove-1.png)
 
 ### Bill of materials / wiring (add)
-- BOM: ![BOM](hardware/bom/bom.png)
-- Wiring diagram: ![Wiring](docs/images/wiring%20diagram.png)
-- Wiring Picture: ![Wire_Pic](docs/images/wiring.png)
+- BOM:
+ ![BOM](hardware/bom/bom.png)
+- Wiring diagram: 
+![Wiring](docs/images/wiring%20diagram.png)
+- Wiring Picture: 
+![Wire_Pic](docs/images/wiring.png)
 
 ---
 
@@ -56,51 +59,61 @@
 
 ### Android app (Kotlin)
 - Location: [`android/`](android/)
+- Purpose: Connects to the glove over Bluetooth, streams sensor data, runs on-device inference, and displays the predicted ASL output.
 - What it does:
-  - Bluetooth connection + streaming
-  - User/profile management (if applicable)
-  - Prediction UI + optional text-to-speech
-  - Loads ML assets from `android/app/src/main/assets/`
+  - Bluetooth discovery/connection + live streaming
+  - Buffers a **75-sample window** and runs the **BiLSTM + XGBoost fusion** model
+  - Displays prediction (optional text-to-speech if enabled)
+  - Loads model assets from `android/app/src/main/assets/`
 
 **Run it**
 1. Open **`android/`** in Android Studio (File → Open → `android`)
-2. Add model assets to: `android/app/src/main/assets/`
-3. Plug in phone → Run
+2. Place model files in `android/app/src/main/assets/`:
+   - `TFLiteCompatible_LSTM.tflite`
+   - `TFLiteCompatible_XGB.json`
+   - `labels.txt` (optional)
+3. Plug in Android phone → **Run**
 
-> Detailed Bluetooth steps: see `docs/BLUETOOTH_SETUP_GUIDE.md`
+> Detailed connection steps: [`docs/BLUETOOTH_SETUP_GUIDE.md`](docs/BLUETOOTH_SETUP_GUIDE.md)
+
+---
 
 ### ESP32 firmware
 - Location: [`firmware/esp32/`](firmware/esp32/)
+- Purpose: Reads glove sensors and streams frames over Bluetooth at a steady rate.
 - What it does:
-  - Reads sensor values
-  - Packages sensor frames
-  - Streams over Bluetooth at a steady rate
+  - Reads flex sensors + IMU values
+  - Packages frames for the Android app
+  - Streams continuously over Bluetooth
 
 **Run it**
 1. Open the main `.ino` in Arduino IDE
-2. Select ESP32 board + COM port
+2. Select your ESP32 board + COM port
 3. Upload
+
+---
 
 ### Calibration tools (Python)
 - Location: [`tools/`](tools/)
-- Purpose:
-  - Capture/replay calibration data
-  - Generate calibration outputs for the app
-  - Assist with dataset collection
+- Purpose: Helps collect/replay calibration data and generate calibration outputs used by the Android app.
+- Typical use:
+  - Capture baseline + max bend values
+  - Export calibration results to .csv for consistent readings across sessions/users
 
----
-
-## ML model (add details)
-- Model type: [LSTM / XGBoost / fusion — fill in]
-- Input window: [fill in]
-- Output classes: [fill in]
+## Fusion model (AI + ML)
+- Model type: **Hybrid (stacked) BiLSTM + XGBoost**
+  - LSTM learns sequence features from sensor windows
+  - XGBoost refines the prediction using LSTM residual/error information
+- Input window: **75 samples × 10 features**  
+  `flex1–flex5, roll_deg, pitch_deg, ax_g, ay_g, az_g`
+- Output classes: **28 total**  
+  `A–Z + NEUTRAL + BACKSPACE`
+- Label encoding: `A→0 ... Z→25, BACKSPACE→26, NEUTRAL→27`
 - Where model files go:
-  - `android/app/src/main/assets/` (not committed if large)
-
-**Model download (recommended)**
-- Put model files in GitHub Releases and document the steps here.
-
----
+  - `android/app/src/main/assets/`
+    - `TFLiteCompatible_LSTM.tflite`
+    - `TFLiteCompatible_XGB.json`
+    - `labels.txt` (optional; one label per line in index order)
 
 ## Repo layout (for recruiters)
 This repo is organized as a clean monorepo: :contentReference[oaicite:1]{index=1}
@@ -121,13 +134,15 @@ Start here:
 
 ---
 
-## Roadmap (add later)
-- [ ] Improve dataset collection flow
-- [ ] Expand gesture vocabulary
-- [ ] Reduce latency + improve stability filtering
-- [ ] Enclosure/strain relief + durability improvements
-
----
+## Roadmap
+- [ ] Improve dataset collection flow (more users, more sessions, better labeling + balancing)
+- [ ] Expand gesture vocabulary and add “confusable letter” training (ex: **M vs N**, S vs A, etc.)
+- [ ] **Hardware v2:** add more sensing points (additional flex sensors / fingertip pressure / better IMU placement) to improve accuracy on close hand shapes
+- [ ] Reduce latency + improve stability filtering (smoother predictions, fewer flickers)
+- [ ] Enclosure + strain relief + durability improvements (wearability + repeatable sensor placement)
+- [ ] **VR integration (long-term):** adapt the glove as a VR input device (pose/gesture tracking + SDK integration)
 
 ## Credits
-Team members / advisors / course: [add]
+- **Team:** Jordan Wray, Madison Peterkin, Raul Chavez, Davaney Pierre, Mark Louis
+- **Course:** Engineering Design 2 (Florida Atlantic University)
+- **Related work / inspiration:** Cornell University ECE 4760 “Sign Language Translation” glove projects (sensor glove + ML translation concept)
