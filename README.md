@@ -27,21 +27,32 @@
 #### SignCast Logo & App Interface
 <p align="center">
   <img src="docs/images/signcast_logo.png" width="260" alt="SignCast Logo" />
-  <img src="docs/images/app_screenshot_2.png" width="260" alt="App Screenshot" />
+</p>
+<p align="center">
+  <img src="docs/images/app_screenshot_2.png" width="700" alt="App Screenshot" />
 </p>
 
-#### [Add more sections as needed]
+
 **Glove in Action**
 <p align="center">
   <img src="docs/images/your_image.jpg" width="500" alt="Description" />
 </p>
 
 **Testing & Calibration**
-<p align="center">
-  <img src="docs/images/your_image_2.jpg" width="500" alt="Description" />
-  <img src="docs/gifs/demo.gif" width="420" />
 
-</p>
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/images/your_image_2.jpg" width="480" alt="Testing setup photo" />
+      <br><sub>Live sensor stream + calibration setup</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/gifs/demo.gif" width="480" alt="Demo GIF" />
+      <br><sub>Gesture demo (GIF)</sub>
+    </td>
+  </tr>
+</table>
+
 
 ---
 
