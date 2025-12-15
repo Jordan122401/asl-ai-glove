@@ -46,9 +46,9 @@
 ![PCB](docs/images/pcb_glove-1.png)
 
 ### Bill of materials / wiring (add)
-- BOM: [add link/file]
-- Wiring diagram: [add link/file]
-- Build notes: [add link/file]
+- BOM: ![BOM](hardware/bom/bom.png)
+- Wiring diagram: ![Wiring](docs/images/wiring%20diagram.png)
+- Wiring Picture: ![Wire_Pic](docs/images/wiring.png)
 
 ---
 
