@@ -33,17 +33,17 @@
 3. **Android app** receives frames, buffers a window, and runs on-device ML
 4. App displays the predicted letter/gesture and can optionally do text-to-speech
 
-![Architecture](docs/images/system_architecture.png)
+![Architecture](docs/images/overallsystem.png)
+![Architecture](docs/images/flowsystem.png)
 
 ---
 
 ## Hardware (schematics + PCB + build)
 ### Schematics
-- PDF: [`hardware/glove.pdf`](hardware/glove.pdf)
+![Schematics](docs/images/glove-1.png)
 
 ### PCB (if used)
-- Top: [`hardware/pcb glove.pdf`](hardware/pcb glove.pdf)
-- Bottom: `hardware/pcb/pcb_bottom.png`
+![PCB](docs/images/pcb_glove-1.png)
 
 ### Bill of materials / wiring (add)
 - BOM: [add link/file]
