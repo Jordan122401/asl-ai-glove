@@ -223,7 +223,10 @@ This repo is organized as a clean monorepo:
 
 ---
 
-<p align="center">Made with ❤️ by the SignCast Team</p>
+<p align="center"><b>Made with ❤️ by the SignCast Team</b></p>
 
 <p align="center">
-  <img src="docs/images/team_shot.jpg" width="260" alt="SignCast Logo" /> </p>
+  <img src="docs/images/team_shot.jpg" width="900" alt="SignCast Team photo" />
+  <br>
+  <sub>Engineering Design 2 — SignCast Team (5 members)</sub>
+</p>
