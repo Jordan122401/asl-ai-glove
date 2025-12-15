@@ -1,15 +1,23 @@
+# IDE and build cache
+.idea/
+.kotlin/
+.gradle/
 *.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
 .DS_Store
+
+# Android project
+android/.idea/
+android/.gradle/
+android/local.properties
+android/build/
+android/app/build/
+
+# Native/NDK build outputs
+/externalNativeBuild
+/.externalNativeBuild
+/.cxx
+
+# Miscellaneous
 /build
 /captures
-.externalNativeBuild
-.cxx
-local.properties
+/local.properties
