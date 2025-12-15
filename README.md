@@ -40,7 +40,7 @@
 
 ## Hardware (schematics + PCB + build)
 ### Schematics
-![Schematics](docs/images/glove-1.png)
+![Schematics](docs/images/Glove-1.png)
 
 ### PCB (if used)
 ![PCB](docs/images/pcb_glove-1.png)
