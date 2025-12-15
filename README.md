@@ -1,67 +1,133 @@
 # AI-Powered Glove for ASL Translation
 
-An Android + ESP32 system that translates American Sign Language (ASL) gestures into text using on-glove sensors, Bluetooth streaming, and on-device machine learning.
+> ESP32 + sensor glove + Android app that streams hand-sensor data over Bluetooth and runs on-device ML to translate ASL gestures into text.
 
-## Quick start
-1. **Clone**
-   ```bash
-   git clone <repo-url>
-   cd asl-ai-glove
-   ```
-2. **Android app**
-   - Open the `android/` folder directly in Android Studio (File → Open → `android`).
-   - Add the model assets to `android/app/src/main/assets/`:
-     - `TFLiteCompatible_LSTM.tflite`
-     - `TFLiteCompatible_XGB.json`
-   - Connect an Android device and click **Run**.
-3. **Firmware**
-   - Open `firmware/esp32/ASL_FINAL__(.ino` in Arduino IDE.
-   - Select your ESP32 board + COM port, then upload.
-4. **Calibration + BLE helpers**
-   - From `tools/`, set up a virtual environment and install dependencies:
-     ```bash
-     cd tools
-     python -m venv .venv
-     source .venv/bin/activate
-     pip install -r calibration_requirements.txt
-     ```
-   - Capture or replay calibration data with `python calibration_capture.py` or `python python_calibration.py`.
-   - Windows helpers (`run_calibration.bat`, `copy_calibration_to_android.bat`) are also in `tools/`.
+![Glove hero](docs/images/hero_glove.jpg)
 
-## Architecture overview
-- **Hardware**: Flex sensors + IMU on the glove feed raw values into an ESP32.
-- **Firmware (ESP32)**: Streams sensor readings over Bluetooth to the mobile app.
-- **Mobile app (Android/Kotlin)**:
-  - Buffers sensor frames, runs the LSTM + XGBoost fusion model, and filters predictions for stability.
-  - Manages Bluetooth connections, user profiles, and text-to-speech output.
-- **Calibration utilities**: Python scripts to collect, replay, and transfer calibration datasets between the glove and the Android app.
+## Quick links (start here)
+- 📱 **Android app:** [`android/`](android/)
+- 🧠 **Firmware (ESP32):** [`firmware/esp32/`](firmware/esp32/)
+- 🧰 **Calibration tools (Python):** [`tools/`](tools/)
+- 🧾 **Docs (BLE + setup + calibration):** [`docs/`](docs/)
+- 🧩 **Hardware (schematics/PCB):** [`hardware/`](hardware/)
 
-## Folder map
-- `android/` – Android Studio project (`app/`, Gradle wrapper/config). Open this folder in Android Studio.
-- `firmware/esp32/` – ESP32 Arduino sketch for the glove.
-- `hardware/` – 3D prints, PCB exports, and hardware documentation.
-- `docs/` – BLE guides, calibration notes, quick-start checklists, and images.
-- `tools/` – Python calibration scripts, requirements, and Windows helper BAT files.
+---
 
-## Run the Android app
-1. Open `android/` in Android Studio to trigger Gradle sync from the correct project root.
-2. Ensure the model assets are present in `android/app/src/main/assets/`.
-3. Pair the glove via system Bluetooth settings, then launch the app and select the device in the Bluetooth screen.
-4. See detailed Bluetooth steps in [`docs/BLUETOOTH_SETUP_GUIDE.md`](docs/BLUETOOTH_SETUP_GUIDE.md) and BLE command references in the `docs/BLE_*.md` files.
+## Demo (add later)
+- **Video:** [add link]
+- **Photos:** (hero image above) + screenshots below
 
-## Run the firmware
-1. Connect the ESP32 board and open `firmware/esp32/ASL_FINAL__(.ino` in Arduino IDE.
-2. Configure the correct board/port, then upload.
-3. Refer to [`docs/FIRMWARE_UPDATE_SUMMARY.md`](docs/FIRMWARE_UPDATE_SUMMARY.md) for notes on firmware changes.
+<p align="center">
+  <img src="docs/images/app_screenshot_1.png" width="260" />
+  <img src="docs/images/app_screenshot_2.png" width="260" />
+</p>
 
-## Use the calibration tools
-1. Install Python dependencies from `tools/calibration_requirements.txt` (see Quick start above).
-2. Capture live glove data with `python calibration_capture.py`.
-3. Process or replay calibration datasets with `python python_calibration.py`.
-4. Transfer calibration outputs to the Android device using the helper BAT scripts when working on Windows.
+---
+
+## System overview (60 seconds)
+**Goal:** Translate ASL gestures using wearable sensors + embedded streaming + mobile ML inference.
+
+**Pipeline:**
+1. **Glove sensors** (flex sensors + IMU) measure finger bend + motion
+2. **ESP32 firmware** reads sensors and streams frames over Bluetooth
+3. **Android app** receives frames, buffers a window, and runs on-device ML
+4. App displays the predicted letter/gesture and can optionally do text-to-speech
+
+![Architecture](docs/images/system_architecture.png)
+
+---
+
+## Hardware (schematics + PCB + build)
+### Schematics
+- PDF: [`hardware/glove.pdf`](hardware/glove.pdf)
+
+### PCB (if used)
+- Top: [`hardware/pcb glove.pdf`](hardware/pcb glove.pdf)
+- Bottom: `hardware/pcb/pcb_bottom.png`
+
+### Bill of materials / wiring (add)
+- BOM: [add link/file]
+- Wiring diagram: [add link/file]
+- Build notes: [add link/file]
+
+---
+
+## Software components
+
+### Android app (Kotlin)
+- Location: [`android/`](android/)
+- What it does:
+  - Bluetooth connection + streaming
+  - User/profile management (if applicable)
+  - Prediction UI + optional text-to-speech
+  - Loads ML assets from `android/app/src/main/assets/`
+
+**Run it**
+1. Open **`android/`** in Android Studio (File → Open → `android`)
+2. Add model assets to: `android/app/src/main/assets/`
+3. Plug in phone → Run
+
+> Detailed Bluetooth steps: see `docs/BLUETOOTH_SETUP_GUIDE.md`
+
+### ESP32 firmware
+- Location: [`firmware/esp32/`](firmware/esp32/)
+- What it does:
+  - Reads sensor values
+  - Packages sensor frames
+  - Streams over Bluetooth at a steady rate
+
+**Run it**
+1. Open the main `.ino` in Arduino IDE
+2. Select ESP32 board + COM port
+3. Upload
+
+### Calibration tools (Python)
+- Location: [`tools/`](tools/)
+- Purpose:
+  - Capture/replay calibration data
+  - Generate calibration outputs for the app
+  - Assist with dataset collection
+
+---
+
+## ML model (add details)
+- Model type: [LSTM / XGBoost / fusion — fill in]
+- Input window: [fill in]
+- Output classes: [fill in]
+- Where model files go:
+  - `android/app/src/main/assets/` (not committed if large)
+
+**Model download (recommended)**
+- Put model files in GitHub Releases and document the steps here.
+
+---
+
+## Repo layout (for recruiters)
+This repo is organized as a clean monorepo: :contentReference[oaicite:1]{index=1}
+
+- `android/` – Android Studio project (open this folder)
+- `firmware/esp32/` – ESP32 Arduino sketch
+- `hardware/` – schematics/PCB exports/build files
+- `docs/` – BLE + calibration + setup documentation
+- `tools/` – Python scripts and helper utilities
+
+---
 
 ## Documentation
-Key references live in `docs/`:
-- BLE and Bluetooth flows: `docs/BLE_COMMAND_GUIDE.md`, `docs/BLUETOOTH_SETUP_GUIDE.md`, `docs/BLE_CONNECTION_SUMMARY.md`.
-- Calibration: `docs/CALIBRATION_SIMPLIFIED.md`, `docs/PYTHON_CALIBRATION_INTEGRATION.md`, `docs/QUICK_START_CHECKLIST.md`.
-- User management and release notes: `docs/USER_MANAGEMENT_GUIDE.md`, `docs/CHANGES_SUMMARY.md`, `docs/FIRMWARE_UPDATE_SUMMARY.md`.
+Start here:
+- Bluetooth: `docs/BLUETOOTH_SETUP_GUIDE.md`
+- BLE commands: `docs/BLE_COMMAND_GUIDE.md`
+- Calibration: `docs/CALIBRATION_SIMPLIFIED.md`
+
+---
+
+## Roadmap (add later)
+- [ ] Improve dataset collection flow
+- [ ] Expand gesture vocabulary
+- [ ] Reduce latency + improve stability filtering
+- [ ] Enclosure/strain relief + durability improvements
+
+---
+
+## Credits
+Team members / advisors / course: [add]
