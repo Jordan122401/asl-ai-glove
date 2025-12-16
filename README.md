@@ -172,6 +172,11 @@
   - `TFLiteCompatible_XGB.json`
   - `labels.txt` (optional; one label per line in index order)
 
+
+  <p align="center">
+  <img src="docs/images/Confusion_matrix.png" width="900" alt="SignCast Team photo" />
+</p>
+
 ---
 
 ## 📁 Repository Structure
